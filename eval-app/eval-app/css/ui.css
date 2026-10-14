@@ -1,0 +1,156 @@
+/* ===== ชุดตกแต่ง/จัดวางใหม่ (โหลดหลัง layout.css) ===== */
+:root{
+  --t-blue:#2563eb;   --t-blue-s:#e0eaff;
+  --t-green:#16a34a;  --t-green-s:#dcf5e5;
+  --t-amber:#d97706;  --t-amber-s:#fdf0d8;
+  --t-slate:#64748b;  --t-slate-s:#e8edf3;
+  --t-violet:#7c3aed; --t-violet-s:#ede5ff;
+  --hero-a:#1d4fc4; --hero-b:#5b3fd6;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --t-blue:#7fb0ff;  --t-blue-s:#16264a;
+    --t-green:#5fd38c; --t-green-s:#12301f;
+    --t-amber:#f2b55b; --t-amber-s:#33260f;
+    --t-slate:#9fb0c6; --t-slate-s:#1d2738;
+    --t-violet:#b69bff;--t-violet-s:#261c45;
+    --hero-a:#1a3c8f; --hero-b:#3e2b97;
+  }
+}
+.t-blue{--tone:var(--t-blue);--tone-s:var(--t-blue-s)}
+.t-green{--tone:var(--t-green);--tone-s:var(--t-green-s)}
+.t-amber{--tone:var(--t-amber);--tone-s:var(--t-amber-s)}
+.t-slate{--tone:var(--t-slate);--tone-s:var(--t-slate-s)}
+.t-violet{--tone:var(--t-violet);--tone-s:var(--t-violet-s)}
+
+/* ---------- หน้าเข้าสู่ระบบ: แบ่ง 2 ฝั่ง ---------- */
+.app.authpage{max-width:none;margin:0;padding:0}
+body:has(.app.authpage){padding:0}
+.auth{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);min-height:100vh;min-height:100dvh}
+.auth-hero{position:relative;overflow:hidden;color:#fff;padding:44px 56px;display:flex;flex-direction:column;justify-content:space-between;gap:32px;
+  background:linear-gradient(150deg,#0e1a33 0%,#16357f 55%,#2b63d9 100%)}
+.blob{position:absolute;border-radius:50%;filter:blur(2px);pointer-events:none}
+.b1{width:420px;height:420px;right:-120px;top:-120px;background:radial-gradient(circle at 30% 30%,rgba(122,162,255,.55),transparent 70%)}
+.b2{width:320px;height:320px;left:-100px;bottom:-80px;background:radial-gradient(circle at 60% 40%,rgba(155,120,255,.45),transparent 70%)}
+.b3{width:160px;height:160px;right:22%;bottom:18%;background:radial-gradient(circle,rgba(255,255,255,.18),transparent 70%)}
+.auth-brand,.auth-copy,.auth-foot{position:relative}
+.auth-brand{display:flex;align-items:center;gap:12px}
+.auth-brand b{display:block;font-family:var(--font-display);font-size:1.05rem}
+.auth-brand span{font-size:.8rem;opacity:.75}
+.auth-brand .side-logo{width:44px;height:44px;background:linear-gradient(140deg,#7aa2ff,#2b63d9);box-shadow:0 8px 20px -8px #000}
+.auth-copy h1{font-size:clamp(1.7rem,3vw,2.5rem);line-height:1.3;color:#fff}
+.auth-copy>p{margin-top:12px;opacity:.8;max-width:440px}
+.feats{list-style:none;padding:0;margin:28px 0 0;display:flex;flex-direction:column;gap:14px}
+.feats li{display:flex;gap:14px;align-items:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:12px 14px;max-width:440px;backdrop-filter:blur(6px)}
+.feats li>span{width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,.14);display:grid;place-items:center;flex:none}
+.feats svg{width:20px;height:20px}
+.feats b{display:block;font-weight:600}
+.feats small{opacity:.75}
+.auth-foot{font-size:.78rem;opacity:.6}
+.auth-side{display:grid;place-items:center;padding:32px 20px;background:var(--bg)}
+.auth-side .panel.login{margin:0;width:min(420px,100%);padding:28px;border-radius:18px;box-shadow:var(--sh-3)}
+.auth-side .panel.login h1{font-size:1.6rem}
+@media (max-width:860px){
+  .auth{grid-template-columns:minmax(0,1fr)}
+  .auth-hero{padding:24px 20px 28px;gap:16px}
+  .feats,.auth-foot,.auth-copy>p{display:none}
+  .auth-copy h1{font-size:1.4rem}
+  .auth-side{padding:20px 16px 40px;place-items:start center}
+}
+
+/* ---------- เมนูซ้าย: หมวดหมู่ ---------- */
+.nav .nav-label{margin-top:12px;text-transform:none;font-weight:600}
+.nav .nav-label:first-child{margin-top:0}
+
+/* ---------- แถบหัว ---------- */
+.crumb{font-size:.74rem;color:var(--muted)}
+.crumb span{opacity:.5;margin:0 2px}
+.head h1{font-size:1.2rem;line-height:1.3}
+.head-date{font-size:.82rem;color:var(--muted);white-space:nowrap}
+.chip{padding:4px 12px 4px 4px;gap:8px}
+.chip b{display:block;font-size:.84rem;line-height:1.25}
+.chip small{display:block;font-size:.7rem;color:var(--muted);line-height:1.2}
+.avatar.xs{width:28px;height:28px;font-size:.8rem}
+@media (max-width:1100px){ .head-date{display:none} }
+
+/* ---------- แบนเนอร์ทักทาย ---------- */
+.hero-banner{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;
+  padding:28px 32px;border-radius:20px;color:#fff;background:linear-gradient(130deg,var(--hero-a),var(--hero-b));box-shadow:var(--sh-3)}
+.hero-banner::before,.hero-banner::after{content:"";position:absolute;border-radius:50%;pointer-events:none}
+.hero-banner::before{width:300px;height:300px;right:-80px;top:-140px;background:radial-gradient(circle,rgba(255,255,255,.22),transparent 70%)}
+.hero-banner::after{width:220px;height:220px;left:35%;bottom:-150px;background:radial-gradient(circle,rgba(255,255,255,.14),transparent 70%)}
+.hb-text{position:relative;display:flex;flex-direction:column;gap:8px;min-width:0;flex:1 1 320px}
+.hb-text h2{font-size:1.6rem;color:#fff}
+.hb-text p{opacity:.9}
+.hb-text .row{margin-top:6px}
+.hb-date{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;font-size:.8rem;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.2);padding:3px 10px;border-radius:99px}
+.hb-date svg{width:14px;height:14px}
+.hero-banner .btn.primary{background:#fff;color:var(--hero-a);border-color:#fff;box-shadow:0 8px 18px -8px rgba(0,0,0,.5)}
+.hero-banner .btn.ghost{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.35);box-shadow:none}
+.hero-banner .btn.ghost:hover{background:rgba(255,255,255,.2)}
+.ring{position:relative;width:136px;height:136px;flex:none}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:10}
+.ring-bg{stroke:rgba(255,255,255,.22)}
+.ring-fg{stroke:#fff;stroke-linecap:round;transition:stroke-dashoffset .6s ease}
+.ring-txt{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-txt b{font-family:var(--font-num);font-size:1.7rem;line-height:1}
+.ring-txt span{font-size:.75rem;opacity:.85;margin-top:4px}
+.hb-shift{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:150px;padding:16px 22px;border-radius:16px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(8px)}
+.hb-shift span{font-size:.78rem;opacity:.8}
+.hb-shift b{font-size:1.35rem}
+.hb-shift small{font-family:var(--font-num);opacity:.85}
+
+/* ---------- การ์ดสถิติแบบมีไอคอน ---------- */
+.card.stat{display:flex;align-items:center;gap:14px}
+.stat-ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;flex:none;background:var(--tone-s);color:var(--tone);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tone) 18%,transparent)}
+.stat-ic svg{width:24px;height:24px}
+.card.stat .v{font-size:1.7rem}
+.card.stat .lvl{font-family:var(--font-display);font-size:1.15rem}
+.card.stat{border-bottom:3px solid color-mix(in srgb,var(--tone) 55%,transparent)}
+
+/* ---------- แดชบอร์ด 2 คอลัมน์ ---------- */
+.dash{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){ .dash{grid-template-columns:minmax(0,1fr)} }
+.sec-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.flist{display:flex;flex-direction:column}
+.fitem{display:flex;align-items:center;gap:12px;padding:10px 8px;border-bottom:1px solid var(--line);border-radius:10px;transition:background .15s}
+.fitem:last-child{border-bottom:0}
+.fitem:hover{background:color-mix(in srgb,var(--accent-soft) 50%,transparent)}
+.fitem .grow{flex:1;min-width:0;display:flex;flex-direction:column}
+.fitem .grow b{font-weight:600}
+@media (max-width:520px){ .fitem .pill{display:none} }
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mini>div{display:flex;flex-direction:column;gap:4px;padding:12px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.mini b{font-size:1.3rem;line-height:1.2}
+.mini-ic{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:var(--tone-s);color:var(--tone)}
+.mini-ic svg{width:17px;height:17px}
+.deps{display:flex;flex-direction:column;gap:12px}
+.dep-l{display:flex;justify-content:space-between;font-size:.88rem;margin-bottom:5px}
+.dep .track{height:8px}
+.empty-state{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:36px 16px}
+.empty-state>svg{width:44px;height:44px;color:var(--accent);background:var(--accent-soft);border-radius:50%;padding:10px;box-sizing:content-box}
+
+/* ---------- หน้าประเมิน: การ์ดแบบตาราง ---------- */
+.emp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.emp-grid .emp.ecard{display:flex;flex-direction:column;align-items:stretch;gap:12px;margin:0;padding:16px;border:1px solid var(--line);border-top:4px solid var(--t-slate-s);border-radius:16px;background:var(--surface);box-shadow:var(--sh-1);transition:transform .18s,box-shadow .18s}
+.emp-grid .emp.ecard:hover{transform:translateY(-3px);box-shadow:var(--sh-3);background:var(--surface)}
+.emp-grid .emp.ecard[data-st="submitted"]{border-top-color:var(--ok);background:linear-gradient(180deg,var(--ok-soft),var(--surface) 75%)}
+.emp-grid .emp.ecard[data-st="submitted"]:hover{background:linear-gradient(180deg,var(--ok-soft),var(--surface) 75%)}
+.emp-grid .emp.ecard[data-st="draft"]{border-top-color:var(--warn)}
+.emp-grid .emp.ecard+.emp.ecard{border-top-width:4px}
+.ec-top{display:flex;align-items:flex-start;gap:12px}
+.ec-top .avatar{width:44px;height:44px;font-size:1.1rem}
+.ec-top .info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ec-top .info b{font-size:1.02rem}
+.dep-tag{align-self:flex-start;font-size:.72rem;padding:1px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);margin-top:2px}
+.ec-score{display:flex;flex-direction:column;align-items:center;padding:6px 10px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.ec-score b{font-size:1.15rem;line-height:1.2}
+.ec-score span{font-size:.7rem;color:var(--muted)}
+.ecard .tags{margin-top:0}
+.ecard .acts{margin-top:auto;padding-top:4px}
+.ecard .acts .btn:first-child{flex:1}
+
+/* ---------- เบ็ดเตล็ด ---------- */
+.panel>h2,.panel h3{letter-spacing:.005em}
+.tbl .who-cell b{font-weight:600}

@@ -165,6 +165,62 @@ app.delete('/api/evaluations/:id', requireAuth, requireEvaluator, async (req, re
   } catch (e) { next(e); }
 });
 
+/* ---------- ลืม PIN / เปลี่ยน PIN ---------- */
+// กันเดาสุ่ม: ลองผิดได้ 5 ครั้งต่อ 15 นาที (นับต่อชื่อผู้ใช้และต่อ IP)
+const resetTries = new Map();
+function tooManyTries(key) {
+  const now = Date.now(), t = resetTries.get(key);
+  if (!t || now - t.start > 15 * 60 * 1000) return false;
+  return t.count >= 5;
+}
+function addTry(key) {
+  const now = Date.now(), t = resetTries.get(key);
+  if (!t || now - t.start > 15 * 60 * 1000) resetTries.set(key, { start: now, count: 1 });
+  else t.count++;
+}
+const digits = v => String(v || '').replace(/\D/g, '');
+function dropSessions(userId) {
+  for (const [tok, uid] of sessions) if (uid === userId) sessions.delete(tok);
+}
+
+app.post('/api/forgot-pin', async (req, res, next) => {
+  try {
+    const username = String(req.body.username || '').trim().toLowerCase();
+    const empCode = String(req.body.empCode || '').trim().toUpperCase();
+    const phone = digits(req.body.phone);
+    const newPin = String(req.body.newPin || '');
+    const ipKey = 'ip:' + (req.ip || ''), userKey = 'u:' + username;
+    if (tooManyTries(ipKey) || tooManyTries(userKey)) return res.status(429).json({ error: 'ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาทีแล้วลองใหม่' });
+    if (!/^\d{4,12}$/.test(newPin)) return res.status(400).json({ error: 'PIN ใหม่ต้องเป็นตัวเลข 4–12 หลัก' });
+    const fail = () => { addTry(ipKey); addTry(userKey); return res.status(400).json({ error: 'ข้อมูลยืนยันตัวตนไม่ถูกต้อง' }); };
+    if (!/^[a-z0-9_-]{3,40}$/.test(username) || !empCode || phone.length < 6) return fail();
+    const r = await query('SELECT USER_ID, FULL_NAME, EMP_CODE, PHONE FROM EVAL_ACCOUNTS WHERE USER_ID = :id AND IS_ACTIVE = 1', { id: username });
+    const row = r.rows[0];
+    if (!row || String(row.EMP_CODE || '').toUpperCase() !== empCode || digits(row.PHONE) !== phone) return fail();
+    await query('UPDATE EVAL_ACCOUNTS SET PIN_HASH = :h WHERE USER_ID = :id', { h: pinHash(username, newPin), id: username });
+    resetTries.delete(userKey);
+    dropSessions(username);   // ออกจากระบบทุกเครื่องที่ล็อกอินค้างไว้
+    await notify(username, 'PIN ของคุณถูกรีเซ็ตแล้ว', 'ถ้าคุณไม่ได้เป็นคนทำ กรุณาแจ้งหัวหน้าทันที', 'home');
+    const bosses = await query("SELECT USER_ID FROM EVAL_ACCOUNTS WHERE ROLE = 'evaluator' AND IS_ACTIVE = 1 AND USER_ID <> :id", { id: username });
+    for (const b of bosses.rows) await notify(b.USER_ID, row.FULL_NAME + ' รีเซ็ต PIN ด้วยตนเอง', 'ผ่านการยืนยันด้วยรหัสพนักงานและเบอร์โทร', 'employees');
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+app.post('/api/change-pin', requireAuth, async (req, res, next) => {
+  try {
+    const current = String(req.body.currentPin || ''), newPin = String(req.body.newPin || '');
+    if (!/^\d{4,12}$/.test(newPin)) return res.status(400).json({ error: 'PIN ใหม่ต้องเป็นตัวเลข 4–12 หลัก' });
+    if (current === newPin) return res.status(400).json({ error: 'PIN ใหม่ต้องไม่ซ้ำกับ PIN เดิม' });
+    const r = await query('SELECT PIN_HASH FROM EVAL_ACCOUNTS WHERE USER_ID = :id', { id: req.user.id });
+    const a = Buffer.from(pinHash(req.user.id, current), 'hex'), b = Buffer.from(r.rows[0].PIN_HASH, 'hex');
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(400).json({ error: 'PIN เดิมไม่ถูกต้อง' });
+    await query('UPDATE EVAL_ACCOUNTS SET PIN_HASH = :h WHERE USER_ID = :id', { h: pinHash(req.user.id, newPin), id: req.user.id });
+    await notify(req.user.id, 'เปลี่ยน PIN เรียบร้อยแล้ว', '', 'home');
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 /* ---------- ประวัติพนักงาน ---------- */
 app.get('/api/employees', requireAuth, async (req, res, next) => {
   try {

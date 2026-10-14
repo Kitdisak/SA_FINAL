@@ -1,0 +1,242 @@
+/* โครงหน้าหลังล็อกอิน: แถบเมนูซ้าย + หัวหน้า + เนื้อหา */
+:root{
+  --side-w:248px;
+  --side-bg:#0f1b33; --side-line:#1d2b4a; --side-ink:#dfe7f5; --side-muted:#8d9cba;
+  --side-hover:#172644; --side-active:#1d5fd1; --side-active-ink:#ffffff;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --side-bg:#080f1d; --side-line:#1a2742; --side-hover:#131f38; --side-active:#6aa8ff; --side-active-ink:#081830; }
+}
+
+/* ก่อนล็อกอิน: กลางจอเหมือนเดิม */
+.app.solo{max-width:760px;margin-inline:auto;padding:0 16px 48px}
+
+/* หลังล็อกอิน */
+.app.shell{max-width:none;margin:0;display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);min-height:100vh;min-height:100dvh}
+body:has(.app.shell){padding:0}
+
+.side{position:sticky;top:0;height:100vh;height:100dvh;background:var(--side-bg);color:var(--side-ink);display:flex;flex-direction:column;gap:14px;padding:18px 14px;overflow-y:auto}
+.side-brand{display:flex;align-items:center;gap:10px;padding:2px 6px 14px;border-bottom:1px solid var(--side-line)}
+.side-logo{width:38px;height:38px;border-radius:10px;background:var(--side-active);color:var(--side-active-ink);display:grid;place-items:center;font-family:var(--font-num);font-weight:500;font-size:.95rem;flex:none}
+.side-brand b{display:block;font-family:var(--font-display);font-size:1rem;line-height:1.3}
+.side-brand span{display:block;font-size:.75rem;color:var(--side-muted)}
+
+.side-user{display:flex;align-items:center;gap:10px;background:var(--side-hover);border-radius:10px;padding:10px}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:600;flex:none}
+.side-user b{display:block;font-size:.9rem;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-user span{display:block;font-size:.75rem;color:var(--side-muted)}
+.side-user>div{min-width:0}
+
+.nav{display:flex;flex-direction:column;gap:4px;flex:1}
+.nav-label{font-size:.72rem;letter-spacing:.06em;color:var(--side-muted);padding:6px 10px 2px}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;color:var(--side-ink);padding:10px 12px;border-radius:8px;font-size:.92rem;min-height:42px}
+.nav button:hover{background:var(--side-hover)}
+.nav button.on{background:var(--side-active);color:var(--side-active-ink);font-weight:500}
+.nav svg,.side-out svg{width:18px;height:18px;flex:none}
+.nav .count{margin-left:auto;background:var(--err);color:#fff;font-family:var(--font-num);font-size:.72rem;border-radius:99px;padding:1px 7px;line-height:1.5}
+.side-out{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--side-hover);border:1px solid var(--side-line);color:var(--side-ink);border-radius:8px;padding:10px;min-height:42px}
+.side-out:hover{border-color:var(--side-muted)}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.head{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;background:var(--surface);border-bottom:1px solid var(--line);padding:12px 24px;min-height:64px}
+.head h1{font-size:1.15rem}
+.head .sub{font-size:.78rem;color:var(--muted)}
+.head .grow{flex:1;min-width:0}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:5px 12px;font-size:.85rem;white-space:nowrap}
+.menu-btn{display:none;background:none;border:1px solid var(--line);border-radius:8px;width:40px;height:40px;place-items:center;color:var(--ink)}
+.menu-btn svg{width:20px;height:20px}
+.content{padding:24px;width:100%;max-width:1240px;margin-inline:auto}
+.content .sticky{top:64px}
+.scrim{display:none}
+
+/* การ์ดสถิติ (หน้าหลัก) */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card .k{font-size:.82rem;color:var(--muted)}
+.card .v{font-family:var(--font-num);font-size:1.9rem;line-height:1.2;margin-top:4px}
+.card .v small{font-size:.9rem;color:var(--muted)}
+.card.accent{border-color:var(--accent);background:var(--accent-soft)}
+
+/* ตาราง */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table.tbl{width:100%;border-collapse:collapse;font-size:.9rem;min-width:720px}
+.tbl th{text-align:left;font-weight:600;font-size:.8rem;color:var(--muted);background:var(--bg);padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td.n{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.tbl b{font-weight:600}
+
+/* มือถือ/แท็บเล็ต: เมนูซ้ายเลื่อนออกมาเมื่อกดปุ่ม */
+@media (max-width:900px){
+  .app.shell{grid-template-columns:minmax(0,1fr)}
+  .side{position:fixed;left:0;top:0;bottom:0;z-index:40;width:min(var(--side-w),84vw);transform:translateX(-100%);transition:transform .2s ease}
+  .app.shell.nav-open .side{transform:none}
+  .app.shell.nav-open .scrim{display:block;position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.4)}
+  .menu-btn{display:grid}
+  .head{padding:10px 16px}
+  .head .chip{display:none}
+  .content{padding:16px}
+  .content .sticky{top:60px}
+}
+
+/* กระดิ่งแจ้งเตือน */
+.bell{position:relative;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:none;border:1px solid var(--line);color:var(--ink)}
+.bell:hover{border-color:var(--accent)}
+.bell svg{width:20px;height:20px}
+.bell .count{position:absolute;top:-4px;right:-4px;background:var(--err);color:#fff;font-family:var(--font-num);font-size:.7rem;border-radius:99px;padding:0 6px;line-height:1.6;min-width:18px;text-align:center}
+
+/* รายการแจ้งเตือน */
+.noti-list{padding:6px}
+.noti{display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:14px;color:var(--ink);border-radius:8px}
+.noti:last-child{border-bottom:0}
+.noti:hover{background:var(--bg)}
+.noti .dot{width:9px;height:9px;border-radius:50%;margin-top:8px;flex:none;background:transparent}
+.noti.new .dot{background:var(--accent)}
+.noti.new b{font-weight:600}
+.noti b{font-weight:500}
+.noti .nt{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+
+/* กะทำงาน */
+.shift{display:inline-flex;flex-direction:column;align-items:flex-start;font-size:.82rem;font-weight:500;padding:3px 10px;border-radius:8px;line-height:1.4;white-space:nowrap}
+.shift small{font-family:var(--font-num);font-weight:400;font-size:.72rem;opacity:.85}
+.s-M{background:#dde9fd;color:#1849a3}
+.s-A{background:#fbeedb;color:#8a4f08}
+.s-N{background:#e3e3f6;color:#3b3a8f}
+.s-OFF{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+@media (prefers-color-scheme: dark){
+  .s-M{background:#172a4a;color:#9cc3ff} .s-A{background:#33270f;color:#e9b56a} .s-N{background:#24234a;color:#b3b1f2}
+}
+.legend .shift{flex-direction:row;gap:6px;align-items:baseline}
+
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.day{border:1px solid var(--line);border-radius:10px;padding:10px 8px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.day .dn{font-size:.8rem;color:var(--muted)}
+.day.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.day .shift{white-space:normal}
+@media (max-width:700px){ .week{grid-template-columns:repeat(2,minmax(0,1fr))} }
+
+table.sched{min-width:900px}
+.sched th.today,.sched td.today{background:var(--accent-soft)}
+.sched .sum td{font-weight:600;background:var(--bg)}
+.sel{font:inherit;font-size:.82rem;border:1px solid transparent;border-radius:8px;padding:6px 8px;cursor:pointer;min-width:92px}
+.sel:hover{border-color:var(--accent)}
+.sel.s-none{background:var(--surface);border-color:var(--line);color:var(--muted)}
+
+/* ประวัติพนักงาน */
+.search{max-width:320px}
+.who-cell{display:flex;align-items:center;gap:10px}
+.avatar.sm{width:30px;height:30px;font-size:.85rem}
+.avatar.lg{width:64px;height:64px;font-size:1.6rem}
+.profile-head{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.kvs{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 24px}
+.kv{display:flex;flex-direction:column;gap:2px;border-bottom:1px solid var(--line);padding-bottom:8px;overflow-wrap:anywhere}
+tr[hidden]{display:none}
+
+/* โลโก้: วางรูปที่ img/logo.png (ไม่มีรูป = แสดงตัวอักษร EV) */
+.side-logo{position:relative;overflow:hidden}
+.side-logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#fff}
+
+/* แถบค้นหา + ตัวกรอง */
+.fbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fbar .search{flex:1 1 220px;max-width:none;min-height:40px}
+.fsel{font:inherit;font-size:.9rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:40px;max-width:100%}
+.fsel:hover{border-color:var(--accent)}
+.fsel.on{border-color:var(--accent);background:var(--accent-soft)}
+.fcount{margin-left:auto;white-space:nowrap}
+[data-frow][hidden],.fempty[hidden],.fclear[hidden]{display:none!important}
+@media (max-width:600px){ .fsel{flex:1 1 140px} .fcount{margin-left:0;width:100%} }
+.fbar input[type=search]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;width:100%}
+.fbar input[type=search]:hover{border-color:var(--accent)}
+
+/* ไฮไลต์ตามสถานะการประเมิน (data-st มาจาก filters.js) */
+.pill.done::before{content:"✓ ";font-weight:700}
+.pill.done{font-weight:600}
+/* ตาราง */
+.tbl tr[data-st="submitted"] td{background:var(--ok-soft)}
+.tbl tr[data-st="submitted"] td:first-child{box-shadow:inset 4px 0 0 var(--ok)}
+.tbl tr[data-st="draft"] td:first-child{box-shadow:inset 4px 0 0 var(--warn)}
+.tbl tr[data-st="none"] td:first-child b{font-weight:500}
+/* รายการหน้าประเมินพนักงาน */
+.emp[data-st]{padding-left:14px;padding-right:12px;border-left:4px solid transparent;border-radius:8px;margin-top:6px}
+.emp[data-st="submitted"]{background:var(--ok-soft);border-left-color:var(--ok);border-top-color:transparent}
+.emp[data-st="draft"]{border-left-color:var(--warn)}
+.emp[data-st="submitted"]+.emp{border-top-color:transparent}
+/* คำอธิบายสี */
+.stkey{display:flex;flex-wrap:wrap;gap:14px;font-size:.82rem;color:var(--muted)}
+.stkey i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid var(--line)}
+.stkey .k-s{background:var(--ok-soft);border-left:4px solid var(--ok)}
+.stkey .k-d{background:var(--surface);border-left:4px solid var(--warn)}
+.stkey .k-n{background:var(--surface)}
+[data-st="submitted"] .pill.done{background:var(--ok);color:var(--surface)}
+
+/* ===== มิติ: เงา ไล่สี และการยกตัวเมื่อชี้ ===== */
+:root{
+  --sh-1:0 1px 2px rgba(15,27,45,.06),0 1px 3px rgba(15,27,45,.08);
+  --sh-2:0 6px 16px -4px rgba(15,27,45,.10),0 2px 6px -2px rgba(15,27,45,.06);
+  --sh-3:0 18px 36px -10px rgba(15,27,45,.22),0 6px 12px -6px rgba(15,27,45,.10);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --sh-1:0 1px 2px rgba(0,0,0,.4);
+    --sh-2:0 8px 20px -6px rgba(0,0,0,.55),0 2px 6px -2px rgba(0,0,0,.4);
+    --sh-3:0 20px 40px -12px rgba(0,0,0,.7),0 6px 12px -6px rgba(0,0,0,.5);
+  }
+}
+body{background:radial-gradient(1200px 600px at 100% -10%,var(--accent-soft),transparent 60%),var(--bg);background-attachment:fixed}
+
+/* กล่องและการ์ด */
+.panel,.tbl-wrap{box-shadow:var(--sh-2);border-color:color-mix(in srgb,var(--line) 70%,transparent);border-radius:14px}
+.card{box-shadow:var(--sh-2);border-color:color-mix(in srgb,var(--line) 70%,transparent);border-radius:14px;
+  background:linear-gradient(180deg,var(--surface),color-mix(in srgb,var(--surface) 90%,var(--bg)));
+  transition:transform .18s ease,box-shadow .18s ease}
+.card:hover{transform:translateY(-3px);box-shadow:var(--sh-3)}
+.card.accent{background:linear-gradient(145deg,var(--accent-soft),color-mix(in srgb,var(--accent-soft) 55%,var(--surface)));border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.card .v{text-shadow:0 1px 0 color-mix(in srgb,var(--surface) 60%,transparent)}
+.day{box-shadow:var(--sh-1);background:var(--surface)}
+
+/* ปุ่ม */
+.btn{box-shadow:var(--sh-1);transition:transform .15s ease,box-shadow .15s ease,background .15s,border-color .15s}
+.btn:hover:not([disabled]){transform:translateY(-1px);box-shadow:var(--sh-2)}
+.btn:active:not([disabled]){transform:translateY(0);box-shadow:var(--sh-1)}
+.btn.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 82%,#fff),var(--accent));
+  box-shadow:0 6px 14px -6px color-mix(in srgb,var(--accent) 75%,transparent),inset 0 1px 0 rgba(255,255,255,.25)}
+.btn.primary:hover:not([disabled]){box-shadow:0 10px 20px -8px color-mix(in srgb,var(--accent) 80%,transparent),inset 0 1px 0 rgba(255,255,255,.25)}
+.btn.danger{color:var(--err);border-color:color-mix(in srgb,var(--err) 40%,var(--line));display:inline-flex;align-items:center;gap:6px}
+.btn.danger:hover:not([disabled]){background:var(--err);border-color:var(--err);color:#fff}
+.btn.icon{padding:6px 9px}
+.acts{gap:6px;flex-wrap:nowrap}
+
+/* หัวหน้า: กระจกฝ้า */
+.head{background:color-mix(in srgb,var(--surface) 80%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--sh-1)}
+.bell,.chip{box-shadow:var(--sh-1);background:var(--surface)}
+
+/* เมนูซ้าย */
+.side{background:linear-gradient(180deg,var(--side-bg),color-mix(in srgb,var(--side-bg) 75%,#000));box-shadow:4px 0 24px -12px rgba(0,0,0,.5)}
+.side-logo{background:linear-gradient(140deg,color-mix(in srgb,var(--side-active) 70%,#fff),var(--side-active));box-shadow:0 6px 14px -6px var(--side-active)}
+.side-user{background:linear-gradient(145deg,var(--side-hover),color-mix(in srgb,var(--side-hover) 60%,var(--side-bg)));box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.nav button{transition:background .15s,transform .15s}
+.nav button:hover{transform:translateX(2px)}
+.nav button.on{background:linear-gradient(135deg,color-mix(in srgb,var(--side-active) 85%,#fff),var(--side-active));box-shadow:0 8px 18px -8px var(--side-active),inset 0 1px 0 rgba(255,255,255,.2)}
+.avatar{background:linear-gradient(140deg,var(--accent-soft),color-mix(in srgb,var(--accent) 30%,var(--accent-soft)));box-shadow:var(--sh-1)}
+
+/* แถวรายชื่อ/ตาราง */
+.emp{transition:background .15s,box-shadow .15s,transform .15s}
+.emp:hover{background:color-mix(in srgb,var(--accent-soft) 45%,transparent);border-radius:10px}
+.emp[data-st="submitted"]{box-shadow:var(--sh-1)}
+.emp[data-st="submitted"]:hover{background:var(--ok-soft);box-shadow:var(--sh-2);transform:translateY(-1px)}
+.tbl tbody tr td{transition:background .15s}
+.tbl tbody tr:hover td{background:color-mix(in srgb,var(--accent-soft) 50%,var(--surface))}
+.tbl tbody tr[data-st="submitted"]:hover td{background:color-mix(in srgb,var(--ok-soft) 80%,var(--ok) 8%)}
+.tbl th{background:linear-gradient(180deg,var(--surface),var(--bg))}
+
+/* อื่น ๆ */
+.fsel,.fbar input[type=search]{box-shadow:inset 0 1px 2px rgba(15,27,45,.06)}
+.flash{box-shadow:var(--sh-1);border:1px solid color-mix(in srgb,var(--ok) 25%,transparent)}
+.bar,.track{box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+.bar>i,.track>i{background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 70%,#fff),var(--accent))}
+.danger-zone{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;padding:14px 16px;border:1px dashed color-mix(in srgb,var(--err) 45%,var(--line));border-radius:12px;background:color-mix(in srgb,var(--err) 5%,var(--surface))}
+@media (prefers-reduced-motion:reduce){.card:hover,.btn:hover,.emp:hover,.nav button:hover{transform:none!important}}
+
+/* ลิงก์ลืม PIN */
+.linkbtn{background:none;border:0;color:var(--accent);padding:4px;font-size:.9rem;text-decoration:underline;text-underline-offset:3px;align-self:center;cursor:pointer}
+.linkbtn:hover{filter:brightness(1.15)}

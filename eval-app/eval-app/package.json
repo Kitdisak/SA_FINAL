@@ -1,0 +1,10 @@
+{
+  "name": "eval-app-oracle",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ระบบประเมินพนักงาน เชื่อม Oracle ผ่าน Node.js API",
+  "main": "server/index.js",
+  "scripts": { "start": "node server/index.js", "dev": "node --watch server/index.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "dotenv": "^16.4.7", "express": "^4.21.2", "express-session": "^1.18.1", "oracledb": "^6.7.0" }
+}
