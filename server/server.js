@@ -65,6 +65,23 @@ const ms = d => (d instanceof Date ? d.getTime() : 0);
 const fail = (status, msg) => Object.assign(new Error(msg), { status });
 const avgOf = arr => { const a = arr.filter(x => x > 0); return a.length ? Math.round(a.reduce((p, c) => p + c, 0) / a.length * 100) / 100 : null; };
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !isNaN(new Date(s).getTime());
+const STAGE_KEYS = ['goal', 'self', 'evaluate', 'review'];
+const TH_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function todayTxt() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function thDate(t) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t || ''); return m ? (+m[3]) + ' ' + TH_MONTHS[+m[2] - 1] + ' ' + (+m[1] + 543) : String(t || ''); }
+// ระดับคะแนนและข้อมูลที่ต้องกรอก (evaluation_forms.settings) — UC-13
+const DEFAULT_SETTINGS = { max: 5, labels: ['ต้องปรับปรุงมาก', 'ต้องปรับปรุง', 'ตามเกณฑ์', 'ดี', 'ดีเยี่ยม'],
+  req: { strengths: false, improvements: false, catComment: false, selfComment: false, selfCatComment: false } };
+function parseSettings(txt) {
+  let o = {};
+  try { o = JSON.parse(txt || '{}') || {}; } catch (_) {}
+  const max = [3, 4, 5].includes(Number(o.max)) ? Number(o.max) : 5;
+  const labels = DEFAULT_SETTINGS.labels.map((d, i) => String((Array.isArray(o.labels) && o.labels[i]) || d).slice(0, 60));
+  const req = {};
+  for (const k of Object.keys(DEFAULT_SETTINGS.req)) req[k] = !!(o.req && o.req[k]);
+  return { max, labels: labels.slice(0, max), req };
+}
+const cycleParam = req => (Number.isInteger(Number(req.query.cycle)) && Number(req.query.cycle) > 0 ? Number(req.query.cycle) : null);
 
 async function uidOf(username, run = query) {
   const r = await run('SELECT user_id FROM users WHERE username = :u', { u: username });
@@ -95,22 +112,45 @@ function publicUser(row) {
 }
 
 // รอบการประเมินปัจจุบัน: รอบที่เปิดอยู่ ถ้าไม่มีใช้รอบล่าสุด (ดูได้อย่างเดียว)
-async function currentCycle(run = query) {
-  let c = await run("SELECT cycle_id, cycle_name, status FROM evaluation_cycles WHERE status = 'open' ORDER BY start_date DESC FETCH FIRST 1 ROWS ONLY");
+async function currentCycle(run = query, wantId = null) {
+  let c = { rows: [] };
+  if (wantId) c = await run("SELECT cycle_id, cycle_name, status FROM evaluation_cycles WHERE cycle_id = :w AND status <> 'draft'", { w: wantId });
+  if (!c.rows.length) c = await run("SELECT cycle_id, cycle_name, status FROM evaluation_cycles WHERE status = 'open' ORDER BY start_date DESC FETCH FIRST 1 ROWS ONLY");
   if (!c.rows.length) c = await run("SELECT cycle_id, cycle_name, status FROM evaluation_cycles WHERE status <> 'draft' ORDER BY start_date DESC, cycle_id DESC FETCH FIRST 1 ROWS ONLY");
   if (!c.rows.length) throw fail(400, 'ยังไม่มีรอบการประเมิน');
   const cycleId = c.rows[0].CYCLE_ID;
-  const f = await run('SELECT form_id FROM evaluation_forms WHERE cycle_id = :c ORDER BY form_id FETCH FIRST 1 ROWS ONLY', { c: cycleId });
+  const f = await run('SELECT form_id, settings FROM evaluation_forms WHERE cycle_id = :c ORDER BY form_id FETCH FIRST 1 ROWS ONLY', { c: cycleId });
   if (!f.rows.length) throw fail(400, 'รอบการประเมินนี้ยังไม่มีแบบประเมิน');
   const formId = f.rows[0].FORM_ID;
   const cr = await run('SELECT criteria_id FROM criteria WHERE form_id = :f ORDER BY sort_order', { f: formId });
-  return { cycleId, formId, name: c.rows[0].CYCLE_NAME, status: c.rows[0].STATUS, criteria: cr.rows.map(r => r.CRITERIA_ID) };
+  return { cycleId, formId, name: c.rows[0].CYCLE_NAME, status: c.rows[0].STATUS, criteria: cr.rows.map(r => r.CRITERIA_ID), settings: parseSettings(f.rows[0].SETTINGS) };
 }
 async function openCycle(run) {
-  const c = await currentCycle(run);
+  const c = await currentCycle(run);   // เขียนข้อมูลได้เฉพาะรอบที่เปิดอยู่
   if (c.status !== 'open') throw fail(400, 'รอบการประเมินปิดแล้ว แก้ไขข้อมูลไม่ได้');
   if (c.criteria.length !== 20) throw fail(500, 'แบบประเมินในฐานข้อมูลต้องมี 20 ข้อ');
   return c;
+}
+
+// ช่วงเวลาของขั้นตอน (cycle_stages.stage_key) + การขยายเวลารายคน (deadline_extensions) — BR-EVAL-03, BR-EVAL-07
+async function stageWindow(run, cycleId, key, empId) {
+  const r = await run(`SELECT stage_name, TO_CHAR(start_date, 'YYYY-MM-DD') AS s_txt, TO_CHAR(end_date, 'YYYY-MM-DD') AS e_txt
+                         FROM cycle_stages WHERE cycle_id = :c AND stage_key = :k ORDER BY start_date FETCH FIRST 1 ROWS ONLY`, { c: cycleId, k: key });
+  if (!r.rows.length) return { state: 'open' };
+  let ext = null;
+  if (empId) {
+    const x = await run("SELECT TO_CHAR(until_date, 'YYYY-MM-DD') AS u_txt FROM deadline_extensions WHERE cycle_id = :c AND employee_id = :e AND stage_key = :k", { c: cycleId, e: empId, k: key });
+    if (x.rows.length) ext = x.rows[0].U_TXT;
+  }
+  const t = todayTxt(), st = r.rows[0];
+  const state = t < st.S_TXT ? 'before' : (t > st.E_TXT && !(ext && t <= ext)) ? 'after' : 'open';
+  return { state, name: st.STAGE_NAME, start: st.S_TXT, end: st.E_TXT, ext };
+}
+async function requireWindow(run, cycleId, key, empId) {
+  const w = await stageWindow(run, cycleId, key, empId);
+  if (w.state === 'before') throw fail(403, 'ยังไม่ถึงช่วง "' + w.name + '" (เริ่ม ' + thDate(w.start) + ')');
+  if (w.state === 'after') throw fail(403, 'พ้นกำหนดช่วง "' + w.name + '" แล้ว (สิ้นสุด ' + thDate(w.ext && w.ext > w.end ? w.ext : w.end) + ') กรุณาติดต่อ HR เพื่อขออนุมัติขยายเวลา');
+  return w;
 }
 
 // คะแนนรายข้อของรอบนี้ แยกตามผู้ให้คะแนน ('employee' / 'mentor' = ขั้นประเมิน / 'hr' = หลังปรับเทียบ)
@@ -131,8 +171,8 @@ async function scoreMap(cycleId, role) {
 
 // อ่านผลการประเมินในรอบปัจจุบัน แล้วแปลงเป็นรูปแบบที่หน้าเว็บใช้
 // forEmployee = true: เห็นเฉพาะผลที่เผยแพร่แล้ว และคะแนนเป็นคะแนนสุดท้ายหลังปรับเทียบ
-async function loadEvaluations(username, forEmployee) {
-  const { cycleId } = await currentCycle();
+async function loadEvaluations(username, forEmployee, wantCycle) {
+  const { cycleId } = await currentCycle(query, wantCycle);
   const r = await query(
     `SELECT e.evaluation_id, emp.username AS emp_u, m.username AS men_u, m.full_name AS men_n, e.status,
             e.strengths, e.improvements, e.category_comments, e.employee_reply, e.replied_at,
@@ -141,7 +181,7 @@ async function loadEvaluations(username, forEmployee) {
        JOIN users emp ON emp.user_id = e.employee_id
        LEFT JOIN users m ON m.user_id = e.mentor_id
        LEFT JOIN evaluation_results r ON r.evaluation_id = e.evaluation_id
-      WHERE e.cycle_id = :c AND e.status NOT IN ('not_started', 'pending_mentor')` + (username ? ' AND emp.username = :u' : '') +
+      WHERE e.cycle_id = :c AND e.status NOT IN ('not_started', 'pending_mentor', 'returned')` + (username ? ' AND emp.username = :u' : '') +
     ' ORDER BY emp.username', username ? { c: cycleId, u: username } : { c: cycleId });
   if (!r.rows.length) return [];
   const mentor = await scoreMap(cycleId, 'mentor'), hr = await scoreMap(cycleId, 'hr');
@@ -172,8 +212,8 @@ async function loadEvaluations(username, forEmployee) {
 }
 
 // อ่านแบบประเมินตนเอง (UC-03, UC-04): คะแนน evaluator_role = 'employee' + self_comment / self_category_comments
-async function loadSelf(username) {
-  const { cycleId } = await currentCycle();
+async function loadSelf(username, wantCycle) {
+  const { cycleId } = await currentCycle(query, wantCycle);
   const r = await query(
     `SELECT e.evaluation_id, u.username, e.self_submitted_at, e.self_comment, e.self_category_comments, e.updated_at
        FROM evaluations e JOIN users u ON u.user_id = e.employee_id
@@ -238,8 +278,8 @@ async function saveScores(ex, evalId, role, criteria, scores) {
       { bindDefs: { e: { type: oracledb.NUMBER }, c: { type: oracledb.NUMBER }, r: { type: oracledb.STRING, maxSize: 20 }, s: { type: oracledb.NUMBER } } });
   }
 }
-function checkScores(scores, submit) {
-  if (!Array.isArray(scores) || scores.length !== 20 || scores.some(x => !Number.isInteger(x) || x < 0 || x > 5)) throw fail(400, 'รูปแบบคะแนนไม่ถูกต้อง');
+function checkScores(scores, submit, max = 5) {
+  if (!Array.isArray(scores) || scores.length !== 20 || scores.some(x => !Number.isInteger(x) || x < 0 || x > max)) throw fail(400, 'คะแนนต้องอยู่ระหว่าง 1–' + max);
   if (submit && scores.some(x => x < 1)) throw fail(400, 'กรุณาให้คะแนนครบทุกข้อก่อนส่ง');
 }
 
@@ -273,23 +313,78 @@ app.post('/api/login', async (req, res, next) => {
 
 /* ---------- รอบการประเมิน (UC-01 ดู, UC-12 กำหนด) ---------- */
 async function cycleRows(where, binds) {
-  const r = await query(`SELECT cycle_id, cycle_name, status, TO_CHAR(start_date, 'YYYY-MM-DD') AS s_txt, TO_CHAR(end_date, 'YYYY-MM-DD') AS e_txt
+  const r = await query(`SELECT cycle_id, cycle_name, status, min_goals, TO_CHAR(start_date, 'YYYY-MM-DD') AS s_txt, TO_CHAR(end_date, 'YYYY-MM-DD') AS e_txt
                            FROM evaluation_cycles ${where} ORDER BY start_date DESC, cycle_id DESC`, binds || {});
   const out = [];
   for (const c of r.rows) {
-    const st = await query(`SELECT stage_id, stage_name, TO_CHAR(start_date, 'YYYY-MM-DD') AS s_txt, TO_CHAR(end_date, 'YYYY-MM-DD') AS e_txt
+    const st = await query(`SELECT stage_id, stage_name, stage_key, TO_CHAR(start_date, 'YYYY-MM-DD') AS s_txt, TO_CHAR(end_date, 'YYYY-MM-DD') AS e_txt
                               FROM cycle_stages WHERE cycle_id = :c ORDER BY start_date, stage_id`, { c: c.CYCLE_ID });
     const f = await query('SELECT form_name FROM evaluation_forms WHERE cycle_id = :c ORDER BY form_id FETCH FIRST 1 ROWS ONLY', { c: c.CYCLE_ID });
-    out.push({ id: c.CYCLE_ID, name: c.CYCLE_NAME, status: c.STATUS, start: c.S_TXT, end: c.E_TXT, formName: f.rows.length ? f.rows[0].FORM_NAME : '',
-      stages: st.rows.map(s => ({ id: s.STAGE_ID, name: s.STAGE_NAME, start: s.S_TXT, end: s.E_TXT })) });
+    out.push({ id: c.CYCLE_ID, name: c.CYCLE_NAME, status: c.STATUS, start: c.S_TXT, end: c.E_TXT, minGoals: Number(c.MIN_GOALS || 0), formName: f.rows.length ? f.rows[0].FORM_NAME : '',
+      stages: st.rows.map(s => ({ id: s.STAGE_ID, name: s.STAGE_NAME, key: s.STAGE_KEY || '', start: s.S_TXT, end: s.E_TXT })) });
   }
   return out;
 }
-app.get('/api/cycle', requireAuth, async (_req, res, next) => {
+// รอบที่กำลังดู (ค่าเริ่มต้น = รอบที่เปิดอยู่) + วันนี้ + การขยายเวลาของตนเอง
+app.get('/api/cycle', requireAuth, async (req, res, next) => {
   try {
-    const { cycleId } = await currentCycle();
-    res.json((await cycleRows('WHERE cycle_id = :c', { c: cycleId }))[0] || null);
+    const { cycleId } = await currentCycle(query, cycleParam(req));
+    const c = (await cycleRows('WHERE cycle_id = :c', { c: cycleId }))[0] || null;
+    if (c) {
+      c.today = todayTxt();
+      const own = req.user.role !== 'evaluator';
+      const x = await query(`SELECT x.ext_id, u.username, x.stage_key, TO_CHAR(x.until_date, 'YYYY-MM-DD') AS u_txt, x.reason
+                               FROM deadline_extensions x JOIN users u ON u.user_id = x.employee_id
+                              WHERE x.cycle_id = :c` + (own ? ' AND x.employee_id = :e' : '') + ' ORDER BY u.username, x.stage_key', own ? { c: cycleId, e: req.uid } : { c: cycleId });
+      c.extensions = x.rows.map(r => ({ id: r.EXT_ID, userId: r.USERNAME, stage: r.STAGE_KEY, until: r.U_TXT, reason: r.REASON || '' }));
+    }
+    res.json(c);
   } catch (e) { if (e.status === 400) return res.json(null); next(e); }
+});
+// รายชื่อรอบสำหรับเลือกดูย้อนหลัง (UC-05, UC-14, UC-17)
+app.get('/api/cycle-list', requireAuth, async (_req, res, next) => {
+  try {
+    const r = await query("SELECT cycle_id, cycle_name, status FROM evaluation_cycles WHERE status <> 'draft' ORDER BY start_date DESC, cycle_id DESC");
+    res.json(r.rows.map(c => ({ id: c.CYCLE_ID, name: c.CYCLE_NAME, status: c.STATUS })));
+  } catch (e) { next(e); }
+});
+// HR อนุมัติให้ดำเนินการหลังกำหนดเวลา (BR-EVAL-07)
+app.post('/api/extensions', requireAuth, requireHR, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const username = String(b.employee || '').toLowerCase(), stage = String(b.stage || ''), until = String(b.until || ''), reason = String(b.reason || '').trim().slice(0, 500);
+    if (!['goal', 'self'].includes(stage)) return res.status(400).json({ error: 'เลือกขั้นตอนที่จะขยายเวลา (กำหนดเป้าหมาย / ประเมินตนเอง)' });
+    if (!isDate(until) || until < todayTxt()) return res.status(400).json({ error: 'วันที่ขยายเวลาต้องไม่ก่อนวันนี้' });
+    const who = await tx(async ex => {
+      const { cycleId } = await openCycle(ex);
+      const u = await ex("SELECT user_id, full_name FROM users WHERE username = :u AND role = 'employee' AND status = 'active'", { u: username });
+      if (!u.rows.length) throw fail(400, 'ไม่พบพนักงาน');
+      const c = await ex("SELECT TO_CHAR(end_date, 'YYYY-MM-DD') AS e_txt FROM evaluation_cycles WHERE cycle_id = :c", { c: cycleId });
+      if (until > c.rows[0].E_TXT) throw fail(400, 'วันที่ขยายเวลาต้องไม่เกินวันสิ้นสุดรอบ (' + thDate(c.rows[0].E_TXT) + ')');
+      await ex(`MERGE INTO deadline_extensions d
+                USING (SELECT :c AS cycle_id, :e AS employee_id, :k AS stage_key FROM DUAL) x
+                ON (d.cycle_id = x.cycle_id AND d.employee_id = x.employee_id AND d.stage_key = x.stage_key)
+                WHEN MATCHED THEN UPDATE SET d.until_date = TO_DATE(:u, 'YYYY-MM-DD'), d.reason = :r, d.granted_by = :g, d.granted_at = SYSTIMESTAMP
+                WHEN NOT MATCHED THEN INSERT (cycle_id, employee_id, stage_key, until_date, reason, granted_by) VALUES (x.cycle_id, x.employee_id, x.stage_key, TO_DATE(:u, 'YYYY-MM-DD'), :r, :g)`,
+        { c: cycleId, e: u.rows[0].USER_ID, k: stage, u: until, r: reason, g: req.uid });
+      await audit(ex, req.uid, 'deadline_extensions', u.rows[0].USER_ID, 'EXTEND_DEADLINE', { employee: username, stage, until, reason });
+      return u.rows[0];
+    });
+    await notify(username, 'HR อนุมัติให้' + (stage === 'goal' ? 'ส่งเป้าหมาย' : 'ส่งแบบประเมินตนเอง') + 'ได้ถึง ' + thDate(until), reason, stage === 'goal' ? 'goals' : 'self');
+    res.json({ ok: true, name: who.FULL_NAME });
+  } catch (e) { next(e); }
+});
+app.delete('/api/extensions/:id', requireAuth, requireHR, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    await tx(async ex => {
+      const r = await ex('SELECT employee_id, stage_key FROM deadline_extensions WHERE ext_id = :i', { i: id });
+      if (!r.rows.length) throw fail(404, 'ไม่พบรายการขยายเวลา');
+      await ex('DELETE FROM deadline_extensions WHERE ext_id = :i', { i: id });
+      await audit(ex, req.uid, 'deadline_extensions', r.rows[0].EMPLOYEE_ID, 'CANCEL_EXTENSION', { stage: r.rows[0].STAGE_KEY });
+    });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
 });
 app.get('/api/cycles', requireAuth, requireHR, async (_req, res, next) => {
   try { res.json(await cycleRows('')); } catch (e) { next(e); }
@@ -300,18 +395,34 @@ function checkCycleBody(b) {
   if (!isDate(b.start) || !isDate(b.end) || b.end < b.start) throw fail(400, 'วันที่เริ่มต้น/สิ้นสุดของรอบไม่ถูกต้อง');
   const stages = Array.isArray(b.stages) ? b.stages : [];
   if (stages.length < 1 || stages.length > 8) throw fail(400, 'ต้องมีขั้นตอน 1–8 ขั้น');
+  const minGoals = Number(b.minGoals == null ? 1 : b.minGoals);
+  if (!Number.isInteger(minGoals) || minGoals < 0 || minGoals > 10) throw fail(400, 'จำนวนเป้าหมายขั้นต่ำต้องเป็น 0–10');
+  const used = {};
   for (const s of stages) {
+    if (s.key && !STAGE_KEYS.includes(s.key)) throw fail(400, 'ประเภทขั้นตอนไม่ถูกต้อง');
+    if (s.key && used[s.key]) throw fail(400, 'ประเภทขั้นตอนซ้ำกัน: แต่ละประเภทใช้ได้ 1 ขั้น');
+    if (s.key) used[s.key] = 1;
     if (!String(s.name || '').trim()) throw fail(400, 'กรุณาระบุชื่อขั้นตอน');
     if (!isDate(s.start) || !isDate(s.end) || s.end < s.start) throw fail(400, 'วันที่ของขั้นตอน "' + s.name + '" ไม่ถูกต้อง');
     if (s.start < b.start || s.end > b.end) throw fail(400, 'ขั้นตอน "' + s.name + '" ต้องอยู่ในช่วงวันที่ของรอบ');
   }
-  return { name, start: b.start, end: b.end, stages: stages.map(s => ({ name: String(s.name).trim().slice(0, 50), start: s.start, end: s.end })) };
+  return { name, start: b.start, end: b.end, minGoals, stages: stages.map(s => ({ name: String(s.name).trim().slice(0, 50), key: s.key || null, start: s.start, end: s.end })) };
+}
+// UC-12 Exception 3: ห้ามชื่อซ้ำหรือช่วงวันที่ทับกับรอบอื่น
+async function checkOverlap(ex, b, selfId) {
+  const r = await ex(`SELECT cycle_name, TO_CHAR(start_date, 'YYYY-MM-DD') AS s_txt, TO_CHAR(end_date, 'YYYY-MM-DD') AS e_txt FROM evaluation_cycles
+                       WHERE cycle_id <> :i AND (cycle_name = :n OR (start_date <= TO_DATE(:e, 'YYYY-MM-DD') AND end_date >= TO_DATE(:s, 'YYYY-MM-DD')))`,
+    { i: selfId || 0, n: b.name, s: b.start, e: b.end });
+  if (r.rows.length) {
+    const c = r.rows[0];
+    throw fail(409, c.CYCLE_NAME === b.name ? 'มีรอบชื่อ "' + b.name + '" อยู่แล้ว' : 'ช่วงวันที่ทับกับรอบ "' + c.CYCLE_NAME + '" (' + thDate(c.S_TXT) + ' – ' + thDate(c.E_TXT) + ')');
+  }
 }
 async function writeStages(ex, cycleId, stages) {
   await ex('DELETE FROM cycle_stages WHERE cycle_id = :c', { c: cycleId });
   for (const s of stages) {
-    await ex("INSERT INTO cycle_stages (cycle_id, stage_name, start_date, end_date) VALUES (:c, :n, TO_DATE(:s, 'YYYY-MM-DD'), TO_DATE(:e, 'YYYY-MM-DD'))",
-      { c: cycleId, n: s.name, s: s.start, e: s.end });
+    await ex("INSERT INTO cycle_stages (cycle_id, stage_name, start_date, end_date, stage_key) VALUES (:c, :n, TO_DATE(:s, 'YYYY-MM-DD'), TO_DATE(:e, 'YYYY-MM-DD'), :k)",
+      { c: cycleId, n: s.name, s: s.start, e: s.end, k: s.key });
   }
 }
 // สร้างรอบใหม่ (สถานะร่าง) และคัดลอกแบบประเมิน + เกณฑ์จากรอบล่าสุด
@@ -319,16 +430,17 @@ app.post('/api/cycles', requireAuth, requireHR, async (req, res, next) => {
   try {
     const b = checkCycleBody(req.body || {});
     const id = await tx(async ex => {
-      const ins = await ex(`INSERT INTO evaluation_cycles (cycle_name, start_date, end_date, status)
-                            VALUES (:n, TO_DATE(:s, 'YYYY-MM-DD'), TO_DATE(:e, 'YYYY-MM-DD'), 'draft') RETURNING cycle_id INTO :rid`,
-        { n: b.name, s: b.start, e: b.end, rid: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
+      await checkOverlap(ex, b, 0);
+      const ins = await ex(`INSERT INTO evaluation_cycles (cycle_name, start_date, end_date, status, min_goals)
+                            VALUES (:n, TO_DATE(:s, 'YYYY-MM-DD'), TO_DATE(:e, 'YYYY-MM-DD'), 'draft', :mg) RETURNING cycle_id INTO :rid`,
+        { n: b.name, s: b.start, e: b.end, mg: b.minGoals, rid: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
       const cid = ins.outBinds.rid[0];
       await writeStages(ex, cid, b.stages);
-      const src = await ex(`SELECT f.form_id, f.form_name, f.description FROM evaluation_forms f JOIN evaluation_cycles c ON c.cycle_id = f.cycle_id
+      const src = await ex(`SELECT f.form_id, f.form_name, f.description, f.settings FROM evaluation_forms f JOIN evaluation_cycles c ON c.cycle_id = f.cycle_id
                              WHERE c.cycle_id <> :c ORDER BY c.start_date DESC, f.form_id DESC FETCH FIRST 1 ROWS ONLY`, { c: cid });
       if (!src.rows.length) throw fail(400, 'ไม่พบแบบประเมินต้นแบบสำหรับคัดลอก');
-      const fi = await ex('INSERT INTO evaluation_forms (cycle_id, form_name, description) VALUES (:c, :n, :d) RETURNING form_id INTO :rid',
-        { c: cid, n: src.rows[0].FORM_NAME, d: { val: src.rows[0].DESCRIPTION || '', type: oracledb.CLOB }, rid: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
+      const fi = await ex('INSERT INTO evaluation_forms (cycle_id, form_name, description, settings) VALUES (:c, :n, :d, :st) RETURNING form_id INTO :rid',
+        { c: cid, n: src.rows[0].FORM_NAME, d: { val: src.rows[0].DESCRIPTION || '', type: oracledb.CLOB }, st: { val: src.rows[0].SETTINGS || '', type: oracledb.CLOB }, rid: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
       const fid = fi.outBinds.rid[0];
       const cr = await ex('SELECT title, description, min_score, max_score, category, sort_order FROM criteria WHERE form_id = :f ORDER BY sort_order', { f: src.rows[0].FORM_ID });
       for (const c of cr.rows) {
@@ -349,8 +461,9 @@ app.put('/api/cycles/:id', requireAuth, requireHR, async (req, res, next) => {
       const c = await ex('SELECT status FROM evaluation_cycles WHERE cycle_id = :c', { c: id });
       if (!c.rows.length) throw fail(404, 'ไม่พบรอบการประเมิน');
       if (c.rows[0].STATUS === 'closed') throw fail(400, 'รอบนี้ปิดแล้ว แก้ไขไม่ได้');
-      await ex("UPDATE evaluation_cycles SET cycle_name = :n, start_date = TO_DATE(:s, 'YYYY-MM-DD'), end_date = TO_DATE(:e, 'YYYY-MM-DD') WHERE cycle_id = :c",
-        { n: b.name, s: b.start, e: b.end, c: id });
+      await checkOverlap(ex, b, id);
+      await ex("UPDATE evaluation_cycles SET cycle_name = :n, start_date = TO_DATE(:s, 'YYYY-MM-DD'), end_date = TO_DATE(:e, 'YYYY-MM-DD'), min_goals = :mg WHERE cycle_id = :c",
+        { n: b.name, s: b.start, e: b.end, mg: b.minGoals, c: id });
       await writeStages(ex, id, b.stages);
       await audit(ex, req.uid, 'evaluation_cycles', id, 'UPDATE_CYCLE', b);
     });
@@ -397,13 +510,13 @@ app.post('/api/cycles/:id/close', requireAuth, requireHR, async (req, res, next)
 });
 
 /* ---------- แบบประเมินและเกณฑ์ (UC-13) ---------- */
-app.get('/api/form', requireAuth, async (_req, res, next) => {
+app.get('/api/form', requireAuth, async (req, res, next) => {
   try {
-    const { formId, cycleId, status } = await currentCycle();
+    const { formId, cycleId, status, settings } = await currentCycle(query, cycleParam(req));
     const f = await query('SELECT form_name, description FROM evaluation_forms WHERE form_id = :f', { f: formId });
     const cr = await query('SELECT criteria_id, title, description, min_score, max_score, category, sort_order FROM criteria WHERE form_id = :f ORDER BY sort_order', { f: formId });
     const used = await query("SELECT COUNT(*) AS n FROM evaluation_scores s JOIN evaluations e ON e.evaluation_id = s.evaluation_id WHERE e.cycle_id = :c", { c: cycleId });
-    res.json({ formId, cycleStatus: status, name: f.rows[0].FORM_NAME, description: f.rows[0].DESCRIPTION || '', inUse: Number(used.rows[0].N) > 0,
+    res.json({ formId, cycleStatus: status, settings, name: f.rows[0].FORM_NAME, description: f.rows[0].DESCRIPTION || '', inUse: Number(used.rows[0].N) > 0,
       criteria: cr.rows.map(c => ({ id: c.CRITERIA_ID, order: c.SORT_ORDER, category: c.CATEGORY || '', title: c.TITLE, description: c.DESCRIPTION || '', min: Number(c.MIN_SCORE), max: Number(c.MAX_SCORE) })) });
   } catch (e) { next(e); }
 });
@@ -416,15 +529,28 @@ app.put('/api/form', requireAuth, requireHR, async (req, res, next) => {
     if (!name || name.length > 100) return res.status(400).json({ error: 'กรุณาระบุชื่อแบบประเมิน (ไม่เกิน 100 ตัวอักษร)' });
     if (cats.length !== 5 || cats.some(c => !c || c.length > 100)) return res.status(400).json({ error: 'ต้องมีชื่อหมวดครบ 5 หมวด' });
     if (items.length !== 20 || items.some(i => !String(i.title || '').trim() || String(i.title).length > 150)) return res.status(400).json({ error: 'ต้องมีหัวข้อประเมินครบ 20 ข้อ (ไม่เกิน 150 ตัวอักษร)' });
+    // ระดับคะแนน (3–5 ระดับ) และข้อมูลที่ผู้ประเมินต้องกรอก
+    const max = Number(b.max || 5);
+    if (![3, 4, 5].includes(max)) return res.status(400).json({ error: 'จำนวนระดับคะแนนต้องเป็น 3, 4 หรือ 5 ระดับ' });
+    const labels = (Array.isArray(b.labels) ? b.labels : []).slice(0, max).map(x => String(x || '').trim());
+    if (labels.length !== max || labels.some(l => !l || l.length > 60)) return res.status(400).json({ error: 'กรุณาตั้งชื่อระดับคะแนนให้ครบทุกระดับ (ไม่เกิน 60 ตัวอักษร)' });
+    const reqf = {};
+    for (const k of Object.keys(DEFAULT_SETTINGS.req)) reqf[k] = !!(b.req && b.req[k]);
     await tx(async ex => {
-      const { formId, status } = await currentCycle(ex);
+      const { formId, cycleId, status, settings: old } = await currentCycle(ex);
       if (status === 'closed') throw fail(400, 'รอบการประเมินปิดแล้ว แก้ไขแบบประเมินไม่ได้');
-      await ex('UPDATE evaluation_forms SET form_name = :n, description = :d WHERE form_id = :f', { n: name, d: { val: description, type: oracledb.CLOB }, f: formId });
-      for (let i = 0; i < 20; i++) {
-        await ex('UPDATE criteria SET title = :t, description = :d, category = :c WHERE form_id = :f AND sort_order = :o',
-          { t: String(items[i].title).trim(), d: { val: String(items[i].description || '').slice(0, 2000), type: oracledb.CLOB }, c: cats[Math.floor(i / 4)], f: formId, o: i + 1 });
+      if (max !== old.max) {   // BR-HR-03: เปลี่ยนจำนวนระดับคะแนนหลังให้คะแนนแล้ว จะทำให้คะแนนเดิมผิดความหมาย
+        const used = await ex('SELECT COUNT(*) AS n FROM evaluation_scores s JOIN evaluations e ON e.evaluation_id = s.evaluation_id WHERE e.cycle_id = :c', { c: cycleId });
+        if (Number(used.rows[0].N) > 0) throw fail(409, 'มีการให้คะแนนในรอบนี้แล้ว เปลี่ยนจำนวนระดับคะแนนไม่ได้ (แก้ได้เฉพาะชื่อระดับ)');
       }
-      await audit(ex, req.uid, 'evaluation_forms', formId, 'UPDATE_FORM', { name, categories: cats });
+      const st = JSON.stringify({ max, labels, req: reqf });
+      await ex('UPDATE evaluation_forms SET form_name = :n, description = :d, settings = :st WHERE form_id = :f',
+        { n: name, d: { val: description, type: oracledb.CLOB }, st: { val: st, type: oracledb.CLOB }, f: formId });
+      for (let i = 0; i < 20; i++) {
+        await ex('UPDATE criteria SET title = :t, description = :d, category = :c, min_score = 1, max_score = :mx WHERE form_id = :f AND sort_order = :o',
+          { t: String(items[i].title).trim(), d: { val: String(items[i].description || '').slice(0, 2000), type: oracledb.CLOB }, c: cats[Math.floor(i / 4)], mx: max, f: formId, o: i + 1 });
+      }
+      await audit(ex, req.uid, 'evaluation_forms', formId, 'UPDATE_FORM', { name, categories: cats, max, labels, req: reqf });
     });
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -433,7 +559,7 @@ app.put('/api/form', requireAuth, requireHR, async (req, res, next) => {
 /* ---------- เป้าหมาย (UC-02 พนักงานกำหนด, UC-07 HR ตรวจสอบ) ---------- */
 app.get('/api/goals', requireAuth, async (req, res, next) => {
   try {
-    const { cycleId } = await currentCycle();
+    const { cycleId } = await currentCycle(query, cycleParam(req));
     const own = req.user.role !== 'evaluator';
     const r = await query(`SELECT g.goal_id, u.username, g.title, g.detail, g.status, g.review_comment FROM goals g JOIN users u ON u.user_id = g.employee_id
                             WHERE g.cycle_id = :c` + (own ? ' AND g.employee_id = :e' : " AND g.status <> 'draft'") + ' ORDER BY u.username, g.goal_id', own ? { c: cycleId, e: req.uid } : { c: cycleId });
@@ -457,6 +583,7 @@ app.post('/api/goals', requireAuth, requireEmployee, async (req, res, next) => {
     const b = goalBody(req.body);
     await tx(async ex => {
       const { cycleId } = await openCycle(ex);
+      await requireWindow(ex, cycleId, 'goal', req.uid);
       const n = await ex('SELECT COUNT(*) AS n FROM goals WHERE cycle_id = :c AND employee_id = :e', { c: cycleId, e: req.uid });
       if (Number(n.rows[0].N) >= 10) throw fail(400, 'กำหนดเป้าหมายได้ไม่เกิน 10 ข้อ');
       const ins = await ex("INSERT INTO goals (cycle_id, employee_id, title, detail, status) VALUES (:c, :e, :t, :d, 'draft') RETURNING goal_id INTO :rid",
@@ -470,7 +597,8 @@ app.put('/api/goals/:id', requireAuth, requireEmployee, async (req, res, next) =
   try {
     const b = goalBody(req.body), id = Number(req.params.id);
     await tx(async ex => {
-      await openCycle(ex);
+      const { cycleId } = await openCycle(ex);
+      await requireWindow(ex, cycleId, 'goal', req.uid);
       await ownGoal(ex, id, req.uid);
       await ex("UPDATE goals SET title = :t, detail = :d, status = 'draft' WHERE goal_id = :g", { t: b.title, d: { val: b.detail, type: oracledb.CLOB }, g: id });
       await audit(ex, req.uid, 'goals', id, 'UPDATE_GOAL', b);
@@ -482,7 +610,8 @@ app.delete('/api/goals/:id', requireAuth, requireEmployee, async (req, res, next
   try {
     const id = Number(req.params.id);
     await tx(async ex => {
-      await openCycle(ex);
+      const { cycleId } = await openCycle(ex);
+      await requireWindow(ex, cycleId, 'goal', req.uid);
       await ownGoal(ex, id, req.uid);
       await ex('DELETE FROM goals WHERE goal_id = :g', { g: id });
       await audit(ex, req.uid, 'goals', id, 'DELETE_GOAL', '');
@@ -494,6 +623,14 @@ app.post('/api/goals/submit', requireAuth, requireEmployee, async (req, res, nex
   try {
     const n = await tx(async ex => {
       const { cycleId } = await openCycle(ex);
+      await requireWindow(ex, cycleId, 'goal', req.uid);
+      // BR-EVAL-02: ครบตามจำนวนขั้นต่ำ และทุกข้อที่จะส่งต้องมีรายละเอียด/ตัวชี้วัด
+      const mg = await ex('SELECT min_goals FROM evaluation_cycles WHERE cycle_id = :c', { c: cycleId });
+      const min = Number(mg.rows[0].MIN_GOALS || 0);
+      const all = await ex('SELECT title, detail, status FROM goals WHERE cycle_id = :c AND employee_id = :e', { c: cycleId, e: req.uid });
+      if (all.rows.length < min) throw fail(400, 'ต้องกำหนดเป้าหมายอย่างน้อย ' + min + ' ข้อก่อนส่ง (ตอนนี้มี ' + all.rows.length + ' ข้อ)');
+      const noDetail = all.rows.find(g => ['draft', 'returned'].includes(g.STATUS) && !String(g.DETAIL || '').trim());
+      if (noDetail) throw fail(400, 'กรุณาระบุรายละเอียด/ตัวชี้วัดของเป้าหมาย "' + noDetail.TITLE + '" ก่อนส่ง');
       const r = await ex("UPDATE goals SET status = 'pending_review' WHERE cycle_id = :c AND employee_id = :e AND status IN ('draft', 'returned')", { c: cycleId, e: req.uid });
       if (!r.rowsAffected) throw fail(400, 'ไม่มีเป้าหมายที่รอส่ง');
       await audit(ex, req.uid, 'goals', req.uid, 'SUBMIT_GOALS', { count: r.rowsAffected });
@@ -525,15 +662,15 @@ app.post('/api/goals/:id/review', requireAuth, requireHR, async (req, res, next)
 });
 
 /* ---------- ผลการประเมิน (UC-05, 06, 08, 09, 11, 14) ---------- */
-app.get('/api/evaluations', requireAuth, requireHR, async (_req, res, next) => {
-  try { res.json(await loadEvaluations()); } catch (e) { next(e); }
+app.get('/api/evaluations', requireAuth, requireHR, async (req, res, next) => {
+  try { res.json(await loadEvaluations(null, false, cycleParam(req))); } catch (e) { next(e); }
 });
 app.get('/api/evaluations/:id', requireAuth, async (req, res, next) => {
   try {
     const id = String(req.params.id).toLowerCase();
     const hr = req.user.role === 'evaluator';
     if (!hr && req.user.id !== id) return res.status(403).json({ error: 'ไม่มีสิทธิ์ดูผลประเมินของผู้อื่น' });
-    const list = await loadEvaluations(id, !hr);
+    const list = await loadEvaluations(id, !hr, cycleParam(req));
     res.json({ data: list[0] || null });
   } catch (e) { next(e); }
 });
@@ -543,13 +680,14 @@ app.put('/api/evaluations/:id', requireAuth, requireHR, async (req, res, next) =
     const id = String(req.params.id).toLowerCase();
     const data = req.body || {};
     const submit = data.status === 'submitted';
-    checkScores(data.scores, submit);
+    checkScores(data.scores, false, 5);
     const scores = data.scores;
     const cc = (Array.isArray(data.cc) ? data.cc : []).slice(0, 5).map(x => String(x || '').slice(0, 2000));
     const strengths = String(data.strengths || '').slice(0, 4000), improvements = String(data.improvements || '').slice(0, 4000);
     const avg = avgOf(scores);
     const result = await tx(async ex => {
-      const { cycleId, formId, criteria } = await openCycle(ex);
+      const { cycleId, formId, criteria, settings } = await openCycle(ex);
+      checkScores(scores, submit, settings.max);
       const emp = await ex("SELECT user_id FROM users WHERE username = :u AND role = 'employee' AND status = 'active'", { u: id });
       if (!emp.rows.length) throw fail(400, 'ไม่พบพนักงานที่ต้องการประเมิน');
       let ev = await evalOf(ex, cycleId, id), evalId, before = 'not_started';
@@ -560,6 +698,17 @@ app.put('/api/evaluations/:id', requireAuth, requireHR, async (req, res, next) =
         const ins = await ex(`INSERT INTO evaluations (cycle_id, employee_id, form_id, status) VALUES (:c, :e, :f, 'not_started')
                               RETURNING evaluation_id INTO :rid`, { c: cycleId, e: emp.rows[0].USER_ID, f: formId, rid: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
         evalId = ins.outBinds.rid[0];
+      }
+      // UC-08 Exception 1: ต้องรอพนักงานส่งแบบประเมินตนเองก่อน (เว้นแต่พ้นกำหนดส่งแล้ว)
+      if (!(ev && ev.SELF_SUBMITTED_AT)) {
+        const w = await stageWindow(ex, cycleId, 'self', emp.rows[0].USER_ID);
+        if (w.state !== 'after') throw fail(409, 'พนักงานยังไม่ได้ส่งแบบประเมินตนเอง จึงยังประเมินไม่ได้' + (w.end ? ' (ส่งได้ถึง ' + thDate(w.ext && w.ext > w.end ? w.ext : w.end) + ')' : ''));
+      }
+      if (submit) {   // BR-EVAL-06 + ข้อมูลที่ HR กำหนดให้ต้องกรอก (UC-13)
+        const rq = settings.req;
+        if (rq.strengths && !strengths.trim()) throw fail(400, 'กรุณากรอก "จุดเด่นของพนักงาน" ก่อนส่ง');
+        if (rq.improvements && !improvements.trim()) throw fail(400, 'กรุณากรอก "สิ่งที่ควรปรับปรุงโดยรวม" ก่อนส่ง');
+        if (rq.catComment && cc.filter(x => x.trim()).length < 5) throw fail(400, 'กรุณากรอกความเห็นให้ครบทุกหมวดก่อนส่ง');
       }
       const status = submit ? 'pending_hr' : 'draft';
       await ex(`UPDATE evaluations SET mentor_id = :m, form_id = :f, status = :s, strengths = :st, improvements = :im,
@@ -635,13 +784,14 @@ app.delete('/api/evaluations/:id', requireAuth, requireHR, async (req, res, next
 app.post('/api/reviews/:id/calibrate', requireAuth, requireHR, async (req, res, next) => {
   try {
     const id = String(req.params.id).toLowerCase(), b = req.body || {};
-    checkScores(b.scores, true);
+    checkScores(b.scores, false, 5);
     const summary = String(b.summary || '').trim().slice(0, 4000);
     const avg = avgOf(b.scores);
     await tx(async ex => {
       const { cycleId, criteria } = await openCycle(ex);
       const ev = await evalOf(ex, cycleId, id);
       if (!ev || ev.STATUS !== 'pending_hr') throw fail(409, 'ปรับเทียบได้เฉพาะผลที่อยู่ในสถานะรอตรวจสอบ');
+      checkScores(b.scores, true, (await currentCycle(ex)).settings.max);
       await saveScores(ex, ev.EVALUATION_ID, 'hr', criteria, b.scores);
       await ex(`MERGE INTO evaluation_results r
                 USING (SELECT :id AS evaluation_id FROM DUAL) x ON (r.evaluation_id = x.evaluation_id)
@@ -721,21 +871,25 @@ app.post('/api/reviews/publish', requireAuth, requireHR, async (req, res, next) 
 /* ---------- ประเมินตนเอง (UC-03, UC-04) และส่งกลับให้แก้ไข (UC-10) ---------- */
 app.get('/api/self-evaluations', requireAuth, async (req, res, next) => {
   try {
-    if (req.user.role === 'evaluator') res.json((await loadSelf()).filter(x => x.status !== 'none' || x.returnReason));
-    else res.json(await loadSelf(req.user.id));
+    if (req.user.role === 'evaluator') res.json((await loadSelf(null, cycleParam(req))).filter(x => x.status !== 'none' || x.returnReason));
+    else res.json(await loadSelf(req.user.id, cycleParam(req)));
   } catch (e) { next(e); }
 });
 app.put('/api/self-evaluations/me', requireAuth, requireEmployee, async (req, res, next) => {
   try {
     const data = req.body || {};
     const submit = data.status === 'submitted';
-    checkScores(data.scores, submit);
+    checkScores(data.scores, false, 5);
     const scores = data.scores;
     const cc = (Array.isArray(data.cc) ? data.cc : []).slice(0, 5).map(x => String(x || '').slice(0, 2000));
     const comment = String(data.comment || '').slice(0, 4000);
     const avg = avgOf(scores);
     await tx(async ex => {
-      const { cycleId, formId, criteria } = await openCycle(ex);
+      const { cycleId, formId, criteria, settings } = await openCycle(ex);
+      await requireWindow(ex, cycleId, 'self', req.uid);   // BR-EVAL-03
+      checkScores(scores, submit, settings.max);
+      if (submit && settings.req.selfComment && !comment.trim()) throw fail(400, 'กรุณากรอก "สรุปผลงานของฉัน" ก่อนส่ง');
+      if (submit && settings.req.selfCatComment && cc.filter(x => x.trim()).length < 5) throw fail(400, 'กรุณากรอกความเห็นให้ครบทุกหมวดก่อนส่ง');
       let ev = await evalOf(ex, cycleId, req.user.id), evalId, before = 'not_started';
       if (ev) {
         if (ev.SELF_SUBMITTED_AT) throw fail(409, 'ส่งแบบประเมินตนเองแล้ว แก้ไขไม่ได้ (ถ้าต้องแก้ ให้ HR ส่งกลับ)');
@@ -745,7 +899,7 @@ app.put('/api/self-evaluations/me', requireAuth, requireEmployee, async (req, re
                               RETURNING evaluation_id INTO :rid`, { c: cycleId, e: req.uid, f: formId, rid: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
         evalId = ins.outBinds.rid[0];
       }
-      const after = submit && before === 'not_started' ? 'pending_mentor' : before;   // ยังไม่มีผลจาก HR -> รอประเมิน
+      const after = submit && ['not_started', 'returned'].includes(before) ? 'pending_mentor' : before;   // ยังไม่มีผลจาก HR -> รอประเมิน
       await ex(`UPDATE evaluations SET self_comment = :cm, self_category_comments = :cc, status = :s, updated_at = SYSTIMESTAMP,
                        self_submitted_at = CASE WHEN :sub = 1 THEN SYSTIMESTAMP ELSE NULL END
                  WHERE evaluation_id = :id`,
@@ -766,14 +920,41 @@ app.post('/api/self-evaluations/:id/return', requireAuth, requireHR, async (req,
       const { cycleId } = await openCycle(ex);
       const ev = await evalOf(ex, cycleId, id);
       if (!ev || !ev.SELF_SUBMITTED_AT) throw fail(404, 'พนักงานยังไม่ได้ส่งแบบประเมินตนเอง');
-      await ex(`UPDATE evaluations SET self_submitted_at = NULL, updated_at = SYSTIMESTAMP,
-                       status = CASE WHEN status = 'pending_mentor' THEN 'not_started' ELSE status END
+      // UC-10 Exception 2: ส่งกลับได้เฉพาะก่อน HR เริ่มประเมิน
+      if (ev.STATUS !== 'pending_mentor') throw fail(409, 'HR เริ่มประเมินพนักงานคนนี้แล้ว ส่งกลับไม่ได้ (ถ้าจำเป็น ให้ลบผลประเมินก่อน)');
+      await ex(`UPDATE evaluations SET self_submitted_at = NULL, updated_at = SYSTIMESTAMP, status = 'returned'
                  WHERE evaluation_id = :id`, { id: ev.EVALUATION_ID });
       await ex('INSERT INTO return_records (evaluation_id, reason) VALUES (:id, :r)', { id: ev.EVALUATION_ID, r: { val: reason, type: oracledb.CLOB } });
       await audit(ex, req.uid, 'evaluations', ev.EVALUATION_ID, 'RETURN_SELF', { employee: id, reason: reason.slice(0, 200) });
     });
     await notify(id, 'HR ส่งแบบประเมินตนเองกลับให้แก้ไข', reason.slice(0, 200), 'self');
     res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* ---------- ประวัติการเปลี่ยนแปลง (audit_logs) — UC-15 ขั้นที่ 7, NFR-AUD-01, BR-DATA-01 ---------- */
+app.get('/api/audit', requireAuth, requireHR, async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const username = req.query.employee ? String(req.query.employee).toLowerCase() : '';
+    let where = '', binds = {};
+    if (username) {
+      const uid = await uidOf(username);
+      if (!uid) return res.json([]);
+      where = `WHERE (a.entity_type = 'evaluations' AND a.entity_id IN (SELECT evaluation_id FROM evaluations WHERE employee_id = :e))
+                  OR (a.entity_type = 'goals' AND (a.actor_id = :e OR a.entity_id IN (SELECT goal_id FROM goals WHERE employee_id = :e)))
+                  OR (a.entity_type IN ('deadline_extensions', 'users') AND a.entity_id = :e)`;
+      binds = { e: uid };
+    }
+    const r = await query(`SELECT a.log_id, a.action, a.entity_type, a.entity_id, a.change_detail, TO_CHAR(a.action_at, 'YYYY-MM-DD HH24:MI') AS at_txt,
+                                  u.full_name AS actor, u.username AS actor_u
+                             FROM audit_logs a LEFT JOIN users u ON u.user_id = a.actor_id ${where}
+                            ORDER BY a.log_id DESC FETCH FIRST ${limit} ROWS ONLY`, binds);
+    res.json(r.rows.map(x => {
+      let d = x.CHANGE_DETAIL || '';
+      try { d = JSON.parse(d); } catch (_) {}
+      return { id: x.LOG_ID, action: x.ACTION, entity: x.ENTITY_TYPE, entityId: x.ENTITY_ID, detail: d, at: x.AT_TXT, actor: x.ACTOR || '', actorId: x.ACTOR_U || '' };
+    }));
   } catch (e) { next(e); }
 });
 
@@ -919,11 +1100,33 @@ app.use((err, _req, res, _next) => {
 (async () => {
   try {
     pool = await oracledb.createPool({ user: process.env.DB_USER, password: process.env.DB_PASSWORD, connectString: process.env.DB_CONNECT_STRING, poolMin: 1, poolMax: 8, poolIncrement: 1 });
-    // เพิ่มคอลัมน์สำหรับประเมินตนเองให้อัตโนมัติ (ถ้ามีอยู่แล้วจะข้ามไป)
-    for (const col of ['self_comment', 'self_category_comments']) {
-      try { await query(`ALTER TABLE evaluations ADD ${col} CLOB`); console.log('added column evaluations.' + col); }
-      catch (e) { if (!/ORA-01430|duplicate column/i.test(e.message)) console.error('migration ' + col + ':', e.message); }
+    // ปรับฐานข้อมูลรุ่นก่อนให้อัตโนมัติ (ถ้ามีอยู่แล้วจะข้ามไป) ไม่ต้องรัน SQL ใหม่
+    const MIGRATIONS = [
+      'ALTER TABLE evaluations ADD self_comment CLOB',
+      'ALTER TABLE evaluations ADD self_category_comments CLOB',
+      'ALTER TABLE cycle_stages ADD stage_key VARCHAR2(20)',
+      'ALTER TABLE evaluation_cycles ADD min_goals NUMBER(2) DEFAULT 1',
+      'ALTER TABLE evaluation_forms ADD settings CLOB',
+      `CREATE TABLE deadline_extensions (
+         ext_id NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+         cycle_id NUMBER NOT NULL REFERENCES evaluation_cycles(cycle_id),
+         employee_id NUMBER NOT NULL REFERENCES users(user_id),
+         stage_key VARCHAR2(20) NOT NULL, until_date DATE NOT NULL, reason VARCHAR2(500),
+         granted_by NUMBER REFERENCES users(user_id), granted_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+         CONSTRAINT uq_deadline_ext UNIQUE (cycle_id, employee_id, stage_key))`
+    ];
+    for (const sql of MIGRATIONS) {
+      try { await query(sql); console.log('migrated:', sql.split('(')[0].replace(/\s+/g, ' ').slice(0, 70)); }
+      catch (e) { if (!/ORA-01430|ORA-00955|duplicate column|already exists/i.test(e.message)) console.error('migration failed:', e.message); }
     }
+    // ขั้นตอนเดิมที่ยังไม่มีประเภท: เดาจากชื่อขั้นตอน
+    try {
+      await query(`UPDATE cycle_stages SET stage_key = CASE
+                     WHEN stage_name LIKE '%เป้าหมาย%' THEN 'goal' WHEN stage_name LIKE '%ตนเอง%' THEN 'self'
+                     WHEN stage_name LIKE '%ปรับเทียบ%' OR stage_name LIKE '%ยืนยัน%' OR stage_name LIKE '%เผยแพร่%' THEN 'review'
+                     WHEN stage_name LIKE '%ประเมิน%' THEN 'evaluate' END
+                   WHERE stage_key IS NULL`);
+    } catch (e) { console.error('stage_key backfill:', e.message); }
     // เตือนถ้ายังใช้ฐานข้อมูลรุ่นเก่า (ยังไม่มีบัญชี HR)
     try {
       const h = await query("SELECT COUNT(*) AS n FROM users WHERE role = 'hr'");

@@ -1,6 +1,0 @@
-/* หน้า 2: รายชื่อพนักงาน (ผู้ประเมิน) */
-.stats{display:flex;gap:8px;align-items:baseline}
-.emp{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid var(--line);flex-wrap:wrap}
-.emp:first-child{border-top:0}
-.emp .info{min-width:0;flex:1 1 200px}
-.emp .info b{display:block;font-weight:600}
