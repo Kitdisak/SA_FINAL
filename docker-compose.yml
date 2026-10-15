@@ -1,0 +1,50 @@
+# ทางที่ 2: รันทั้งระบบ (Oracle + เว็บ) ด้วยคำสั่งเดียวบนเครื่องที่มี Docker
+#   เริ่ม:        docker compose up        (ครั้งแรกรอ 2-5 นาที แล้วเปิด http://localhost:3000)
+#   หยุด:        docker compose down      (ข้อมูลยังอยู่)
+#   ล้างข้อมูล:   docker compose down -v   (ลบฐานข้อมูลทิ้ง ครั้งหน้าจะสร้างข้อมูลทดลองใหม่)
+# รหัสผ่านตั้งในไฟล์ .env ข้างไฟล์นี้ได้ (ดู .env.docker.example) ถ้าไม่ตั้งจะใช้ค่าทดลอง
+
+services:
+  oracle:
+    image: gvenzl/oracle-free:slim
+    container_name: eval-oracle
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_ADMIN_PASSWORD:-OracleAdmin123}   # รหัส SYS/SYSTEM
+      EVAL_APP_PASSWORD: ${DB_PASSWORD:-orcl}                     # รหัสบัญชี EVAL_APP ที่เว็บใช้
+    ports:
+      - "1522:1521"            # ต่อจาก SQL Developer ที่ localhost:1522 / FREEPDB1 (ใช้ 1522 กันชนกับ Oracle XE ในเครื่อง)
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./db/init:/container-entrypoint-initdb.d:ro
+      - ./sql:/opt/eval/sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  app:
+    image: node:22-bookworm-slim
+    container_name: eval-app
+    working_dir: /app/server
+    command: sh -c "npm install --no-audit --no-fund && node server.js"
+    environment:
+      DB_USER: EVAL_APP
+      DB_PASSWORD: ${DB_PASSWORD:-orcl}
+      DB_CONNECT_STRING: oracle:1521/FREEPDB1
+      PORT: 3000
+      SESSION_SECRET: ${SESSION_SECRET:-docker-local-session-secret-change-me}
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - app-node-modules:/app/server/node_modules   # แยก node_modules ของ container ไม่ให้ชนกับของเครื่อง
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  oracle-data:
+  app-node-modules:

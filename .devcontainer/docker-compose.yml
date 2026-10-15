@@ -1,0 +1,35 @@
+# ทางที่ 1: GitHub Codespaces / VS Code Dev Containers
+# เปิดโปรเจกต์ใน Codespace แล้วระบบจะสร้าง 2 container ให้อัตโนมัติ
+#   app    = เครื่องสำหรับเขียนโค้ด (Node.js) — terminal ใน VS Code อยู่ที่นี่
+#   oracle = Oracle Database Free พร้อมบัญชี EVAL_APP และ 13 ตาราง
+# app ใช้เครือข่ายเดียวกับ oracle จึงเชื่อมต่อด้วย localhost:1521/FREEPDB1 ได้เหมือนเดิม
+
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm
+    command: sleep infinity
+    volumes:
+      - ../..:/workspaces:cached
+    network_mode: service:oracle
+    depends_on:
+      - oracle
+
+  oracle:
+    image: gvenzl/oracle-free:slim
+    restart: unless-stopped
+    environment:
+      ORACLE_PASSWORD: OracleAdmin123     # รหัส SYS/SYSTEM (ใช้ทดลองใน Codespace เท่านั้น)
+      EVAL_APP_PASSWORD: orcl             # รหัสบัญชี EVAL_APP ต้องตรงกับ DB_PASSWORD ใน server/.env
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ../db/init:/container-entrypoint-initdb.d:ro
+      - ../sql:/opt/eval/sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+volumes:
+  oracle-data:

@@ -1,0 +1,3 @@
+# ไฟล์ .sh ต้องเป็น LF เสมอ (ถ้าเป็น CRLF จาก Windows สคริปต์ใน container จะรันไม่ได้)
+*.sh text eol=lf
+*.sql text eol=lf

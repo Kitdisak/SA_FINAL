@@ -21,19 +21,56 @@
 - `sql/03_document_schema.sql` — สร้าง 13 ตาราง + ตารางเสริม 2 ตาราง + ข้อมูลตั้งต้น (รันด้วย EVAL_APP, รันซ้ำได้ จะล้างข้อมูลเดิม) ช่วงเวลาของรอบตัวอย่างคำนวณจากวันที่รันไฟล์ จึงทดลองส่งเป้าหมาย/ประเมินตนเองได้ทันที
 - `sql/01_schema_and_seed.sql`, `sql/02_add_features.sql` — โครงสร้างรุ่นเก่า **ไม่ต้องใช้แล้ว**
 
-## วิธีติดตั้ง
+## วิธีรัน (เลือก 1 ทาง)
 
-**เครื่อง Windows (Oracle XE, service XEPDB1)**
+### ทาง A — GitHub Codespaces (ง่ายที่สุด ไม่ต้องติดตั้งอะไรเลย)
+1. เปิดหน้า repo บน GitHub → ปุ่มสีเขียว **Code** → แท็บ **Codespaces** → **Create codespace on main**
+2. รอ 3–5 นาที ระบบจะสร้าง Oracle + บัญชี EVAL_APP + 13 ตาราง + ไฟล์ `server/.env` + `npm install` ให้เอง
+3. ใน Terminal พิมพ์
+   ```bash
+   cd server
+   npm run db:check     # ควรขึ้น "ตารางครบ 15 ตาราง" (ถ้าขึ้นเชื่อมต่อไม่ได้ ให้รออีก 1-2 นาที)
+   npm start
+   ```
+4. แท็บ **PORTS** → พอร์ต 3000 → กดรูปลูกโลกเพื่อเปิดเว็บ
+
+คำสั่งที่ใช้บ่อยใน Codespace (พิมพ์ในโฟลเดอร์ `server`)
+
+| คำสั่ง | ใช้ทำอะไร |
+|---|---|
+| `npm start` | เริ่มเว็บ (หยุดด้วย Ctrl+C) |
+| `npm run db:check` | ตรวจว่าเชื่อม Oracle ได้และตารางครบ |
+| `npm run db:reset` | ล้างข้อมูลทั้งหมด แล้วสร้างข้อมูลทดลองใหม่ |
+
+> Codespace ที่สร้างไว้ก่อนเพิ่มโฟลเดอร์ `.devcontainer` ต้อง Rebuild หนึ่งครั้ง: กด `Ctrl+Shift+P` → **Codespaces: Rebuild Container**
+
+### ทาง B — Docker บนเครื่องตัวเอง (Windows / Mac / Linux)
+1. ติดตั้ง **Docker Desktop** แล้วเปิดโปรแกรมไว้
+2. `git clone <ลิงก์ repo>` แล้วเข้าโฟลเดอร์โปรเจกต์
+3. พิมพ์ `docker compose up` แล้วรอจนขึ้น `Evaluation app listening on http://0.0.0.0:3000` (ครั้งแรก 3–5 นาที)
+4. เปิด http://localhost:3000
+
+| คำสั่ง (ที่โฟลเดอร์โปรเจกต์) | ใช้ทำอะไร |
+|---|---|
+| `docker compose up -d` | เริ่มแบบทำงานเบื้องหลัง |
+| `docker compose logs -f app` | ดู log ของเว็บ |
+| `docker compose restart app` | รีสตาร์ตเว็บหลังแก้โค้ด |
+| `docker compose down` | หยุด (ข้อมูลยังอยู่) |
+| `docker compose down -v` | หยุดและลบฐานข้อมูล (เริ่มใหม่ด้วยข้อมูลทดลอง) |
+
+ดูตารางด้วย SQL Developer: Host `localhost` · Port `1522` · Service name `FREEPDB1` · User `EVAL_APP` · Password `orcl`
+
+### ทาง C — Oracle XE ที่ติดตั้งในเครื่อง Windows (แบบเดิม)
 1. SQL Developer → connection ของ EVAL_APP → เปิด `sql/03_document_schema.sql` → กด **F5**
-2. ตรวจ `server/.env`: `DB_CONNECT_STRING=localhost:1521/XEPDB1`
-3. Terminal: `cd server` → `npm.cmd install` (ครั้งแรก) → `npm.cmd start`
-4. เปิด http://localhost:3000 แล้วกด Ctrl+F5
+2. คัดลอก `server/.env.example` เป็น `server/.env` แล้วแก้ `DB_PASSWORD` และ `DB_CONNECT_STRING=localhost:1521/XEPDB1`
+3. Terminal: `cd server` → `npm.cmd install` (ครั้งแรก) → `npm.cmd start` → เปิด http://localhost:3000
 
-**GitHub Codespace (Oracle Free ใน Docker, service FREEPDB1)**
-1. `docker start oracle` แล้วรอจน `docker logs oracle` ขึ้น `DATABASE IS READY TO USE!`
-2. `docker exec -i -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 oracle sqlplus -s EVAL_APP/<รหัสผ่าน>@localhost/FREEPDB1 < sql/03_document_schema.sql`
-3. ตรวจ `server/.env`: `DB_CONNECT_STRING=localhost:1521/FREEPDB1`
-4. `cd server` → `npm install` → `npm start` แล้วเปิดพอร์ต 3000 จากแท็บ Ports
+### ไฟล์ที่ใช้ตั้งค่าอัตโนมัติ
+- `.devcontainer/` — ตั้งค่า Codespace (container `app` สำหรับเขียนโค้ด + container `oracle`)
+- `docker-compose.yml` — รันทั้งระบบด้วย Docker
+- `db/init/01_setup.sh` — รันครั้งแรกที่สร้างฐานข้อมูล: สร้างบัญชี EVAL_APP และรัน `sql/03_document_schema.sql`
+- `server/db-tools.js` — คำสั่ง `npm run db:check` / `db:reset`
+- รหัสผ่าน `orcl` และ `OracleAdmin123` ในไฟล์เหล่านี้เป็นค่าทดลองสำหรับเครื่องพัฒนาเท่านั้น
 
 ## บัญชีทดลอง (PIN เริ่มต้น `1234`)
 

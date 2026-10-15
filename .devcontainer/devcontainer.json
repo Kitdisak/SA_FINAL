@@ -1,0 +1,20 @@
+{
+  "name": "ระบบประเมินพนักงาน (Node.js + Oracle Free)",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "runServices": ["app", "oracle"],
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": { "label": "เว็บระบบประเมิน", "onAutoForward": "notify" },
+    "1521": { "label": "Oracle Database", "onAutoForward": "silent" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postAttachCommand": "bash .devcontainer/welcome.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": ["Oracle.sql-developer"]
+    }
+  }
+}
