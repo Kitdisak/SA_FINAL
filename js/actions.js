@@ -14,7 +14,7 @@
     S.loginErr = ""; S.flash = ""; S.evals = {}; S.replyDraft = "";
     stopSubs();
 
-    if (a.role === "evaluator") {          // ผู้ประเมินเห็นทุกใบ
+    if (a.role !== "evaluatee") {          // HR/ผู้บริหารเห็นทุกใบ, พี่เลี้ยงเห็นเฉพาะทีม (เซิร์ฟเวอร์กรองให้)
       S.view = "home";
       S.unsubs.push(S.db.collection("evaluations").onSnapshot(function (snap) {
         S.evals = {}; snap.docs.forEach(function (d) { S.evals[d.id] = d.data(); });
@@ -90,7 +90,7 @@
     };
     try {
       await S.db.doc("evaluations/" + S.target).set(data);
-      S.flash = status === "submitted" ? "ส่งผลประเมินของ " + S.accounts[S.target].name + " แล้ว รอตรวจสอบและยืนยันผลที่หน้า \"ตรวจสอบและยืนยันผล\"" : "บันทึกร่างแล้ว";
+      S.flash = status === "submitted" ? "ส่งผลประเมินของ " + S.accounts[S.target].name + " ให้ HR ตรวจสอบแล้ว" : "บันทึกร่างแล้ว";
       S.view = S.backView || "list"; S.target = null; S.draft = null; S.formMsg = "";
       A.render(); window.scrollTo(0, 0);
     } catch (e) {

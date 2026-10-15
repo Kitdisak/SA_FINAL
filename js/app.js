@@ -6,7 +6,7 @@
   function topBar() {
     var right = S.me
       ? '<div class="who"><span><b>' + A.esc(S.me.name) + '</b> <span class="muted small">· ' +
-        (S.me.role === "evaluator" ? "HR (ฝ่ายบุคคล)" : "พนักงาน") + '</span></span>' +
+        A.roleName(S.me.role) + '</span></span>' +
         '<button class="btn sm" data-act="logout">ออกจากระบบ</button></div>'
       : "";
     return '<header class="top"><div class="brand">ระบบประเมินพนักงาน<span>' + A.PERIOD + '</span></div>' + right + '</header>';
@@ -110,7 +110,7 @@
     else if (act === "noti") {
       var v = t.getAttribute("data-view");
       A.markRead(+t.getAttribute("data-id"));
-      if (v && A.views[v] && (v !== "table" || S.me.role === "evaluator")) { S.view = v; S.flash = ""; S.selfDraft = null; A.render(); window.scrollTo(0, 0); }
+      if (v && A.canView(v)) { S.view = v; S.flash = ""; S.selfDraft = null; A.render(); window.scrollTo(0, 0); }
     }
     else if (act === "back") { S.view = S.backView || "list"; S.target = null; S.draft = null; A.render(); }
     else if (act === "save-draft") A.saveEval("draft");
@@ -119,7 +119,7 @@
     else if (act === "reply") {
       var txt = S.replyDraft.trim();
       if (!txt) { S.flash = "กรุณาพิมพ์ข้อความก่อนส่ง"; A.render(); return; }
-      A.patchMine({ reply: txt, replyAt: Date.now() }, "ส่งข้อความถึง HR แล้ว");
+      A.patchMine({ reply: txt, replyAt: Date.now() }, "ส่งข้อความถึงพี่เลี้ยงและ HR แล้ว");
     }
   });
 
@@ -129,6 +129,9 @@
     if (S.view === "calib" && e.target.classList && e.target.classList.contains("cb-sel")) { A.calibInput(e.target); return; }
     if (e.target.hasAttribute && e.target.hasAttribute("data-cyclesel")) { e.target.blur(); A.switchCycle(+e.target.value); return; }
     if (e.target.id === "sc-max") { A.scaleRows(+e.target.value); return; }
+    if (e.target.hasAttribute && e.target.hasAttribute("data-ovdep")) { e.target.blur(); S.ovDep = e.target.value; A.render(); return; }
+    var asg = e.target.getAttribute && e.target.getAttribute("data-assign");
+    if (asg != null && e.target.tagName === "SELECT") { e.target.blur(); A.assignMentor(asg, e.target.value); return; }
     var sc = e.target.getAttribute && e.target.getAttribute("data-sched");
     if (sc && e.target.value) { e.target.blur(); A.saveShift(sc, +e.target.getAttribute("data-day"), e.target.value); return; }
     var n = e.target.name;

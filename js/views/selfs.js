@@ -1,4 +1,4 @@
-/* หัวหน้าดูแบบประเมินตนเองของพนักงาน: รายชื่อทั้งหมด (selfs) + รายละเอียดรายคน (selfview) */
+/* พี่เลี้ยงดูแบบประเมินตนเองของพนักงานในความดูแล (selfs) + รายละเอียดรายคน (selfview) — HR เปิดดูได้อย่างเดียว */
 (function (A) {
   var S = A.S;
   var ST = [["submitted", "ส่งแล้ว"], ["draft", "กำลังทำ (ยังไม่ส่ง)"], ["none", "ยังไม่ได้ทำ"]];
@@ -13,7 +13,7 @@
     if (st === "draft") return '<span class="pill draft">กำลังทำ</span>';
     return '<span class="pill">ยังไม่ได้ทำ</span>';
   }
-  // คะแนนของ HR (ถ้ามี) สำหรับเทียบ
+  // คะแนนของพี่เลี้ยง (ถ้ามี) สำหรับเทียบ
   function mentorScores(k) {
     var ev = S.evals[k];
     return ev && ev.scores && ev.scores.some(Boolean) ? ev : null;
@@ -32,7 +32,7 @@
 
   A.views.selfs = function () {
     var esc = A.esc;
-    var emps = Object.keys(S.accounts).filter(function (k) { return S.accounts[k].role === "evaluatee"; });
+    var emps = A.staff();
     var rank = { submitted: 0, draft: 1, none: 2 };
     emps.sort(function (a, b) { return (rank[selfStatus(a)] - rank[selfStatus(b)]) || S.accounts[a].name.localeCompare(S.accounts[b].name, "th"); });
     var sent = emps.filter(function (k) { return selfStatus(k) === "submitted"; });
@@ -53,14 +53,14 @@
 
     return '<div class="stack">' +
       '<div class="row" style="justify-content:space-between;align-items:flex-end"><div><h2>แบบประเมินตนเองของพนักงาน</h2>' +
-        '<p class="muted small">กดชื่อหรือปุ่ม "ดูรายละเอียด" เพื่อดูคะแนนรายข้อ ความเห็น และเทียบกับคะแนนของ HR</p></div>' +
+        '<p class="muted small">กดชื่อหรือปุ่ม "ดูรายละเอียด" เพื่อดูคะแนนรายข้อ ความเห็น และเทียบกับคะแนนของคุณ ถ้าข้อมูลไม่ครบส่งกลับให้แก้ไขได้ (UC-10)</p></div>' +
         '<div class="stats muted"><span class="num" style="color:var(--ink);font-size:1.3rem">' + sent.length + '/' + emps.length + '</span> ส่งแล้ว' +
-        (wait ? ' · <b style="color:var(--accent)">' + wait + '</b> คนรอ HR ประเมิน' : "") + '</div></div>' +
+        (wait ? ' · <b style="color:var(--accent)">' + wait + '</b> คนรอคุณประเมิน' : "") + '</div></div>' +
       A.filterBar("selfs", emps, { dep: true, st: true, statusList: ST, keys: ["ส่งแล้ว", "กำลังทำ ยังไม่ส่ง", "ยังไม่ได้ทำ"], placeholder: "ค้นหาชื่อพนักงาน" }) +
       '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-        '<th>พนักงาน</th><th>แผนก</th><th>สถานะ</th><th>คะแนนตนเอง</th><th>คะแนน HR</th><th>ส่วนต่าง</th><th>วันที่ส่ง</th><th></th>' +
-      '</tr></thead><tbody>' + (rows || '<tr><td colspan="8" class="empty">ยังไม่มีรายชื่อพนักงาน</td></tr>') + '</tbody></table></div>' +
-      '<p class="muted small">ส่วนต่าง = คะแนนตนเอง − คะแนน HR (บวก = พนักงานให้ตัวเองสูงกว่า)</p>' +
+        '<th>พนักงาน</th><th>แผนก</th><th>สถานะ</th><th>คะแนนตนเอง</th><th>คะแนนพี่เลี้ยง</th><th>ส่วนต่าง</th><th>วันที่ส่ง</th><th></th>' +
+      '</tr></thead><tbody>' + (rows || '<tr><td colspan="8" class="empty">ยังไม่มีพนักงานที่ได้รับมอบหมาย</td></tr>') + '</tbody></table></div>' +
+      '<p class="muted small">ส่วนต่าง = คะแนนตนเอง − คะแนนพี่เลี้ยง (บวก = พนักงานให้ตัวเองสูงกว่า)</p>' +
     '</div>';
   };
 
@@ -73,7 +73,8 @@
         '<p class="muted">' + (x && x.returnReason ? "ส่งกลับให้แก้ไขแล้ว: " + esc(x.returnReason) : x && x.status === "draft" ? "พนักงานบันทึกร่างไว้ เมื่อกดส่งแล้วจะเห็นรายละเอียดที่นี่" : "เมื่อพนักงานส่งแล้วจะเห็นรายละเอียดที่นี่") + '</p></section></div>';
     }
     var m = mentorScores(k), sa = A.avg(x.scores), ma = m ? A.avg(m.scores) : 0;
-    var mLabel = m ? (m.status === "submitted" ? "HR" : "HR (ร่าง)") : "";
+    var mLabel = m ? (m.status === "submitted" ? "พี่เลี้ยง" : "พี่เลี้ยง (ร่าง)") : "";
+    var isMentor = S.me.role === "mentor";
 
     var cats = A.CATS.map(function (c, ci) {
       var cs = A.avg(A.catScores(x.scores, ci)), cm = m ? A.avg(A.catScores(m.scores, ci)) : 0;
@@ -87,7 +88,7 @@
           '<span class="muted small">ตนเอง <b class="num">' + cs.toFixed(2) + '</b>' + (m && cm ? ' · ' + mLabel + ' <b class="num">' + cm.toFixed(2) + '</b>' : "") + '</span></div>' +
         '<div class="cmp-head"><span></span><span></span><span>ตนเอง</span>' + (m ? '<span>' + mLabel + '</span>' : "") + '</div>' + items +
         (x.cc && x.cc[ci] ? '<div class="note"><div class="label">ความเห็นของพนักงาน</div>' + esc(x.cc[ci]) + '</div>' : "") +
-        (m && m.cc && m.cc[ci] ? '<div class="note warn"><div class="label">ความเห็นของ HR</div>' + esc(m.cc[ci]) + '</div>' : "") +
+        (m && m.cc && m.cc[ci] ? '<div class="note warn"><div class="label">ความเห็นของพี่เลี้ยง</div>' + esc(m.cc[ci]) + '</div>' : "") +
       '</section>';
     }).join("");
 
@@ -104,18 +105,19 @@
         '<div class="row" style="justify-content:space-between;align-items:flex-start;gap:16px">' +
           '<div class="who-cell"><span class="avatar">' + A.initial(a.name) + '</span><div><h2>' + esc(a.name) + '</h2>' +
             '<p class="muted small">' + esc(a.position || "") + (emp.department ? " · " + esc(emp.department) : "") + (emp.code ? " · " + esc(emp.code) : "") + '</p></div></div>' +
-          '<div class="row"><button class="btn primary" data-act="open" data-id="' + esc(k) + '">' + (ev ? (ev.status === "submitted" ? "เปิดแบบประเมินของ HR" : "ประเมินต่อ") : "เริ่มประเมินคนนี้") + '</button>' +
-            (A.stage(k) === "self" && S.cycle && S.cycle.status === "open" ? '<button class="btn" data-act="self-return" data-id="' + esc(k) + '">ส่งกลับให้แก้ไข</button>' : "") + '</div></div>' +
+          (isMentor ? '<div class="row"><button class="btn primary" data-act="open" data-id="' + esc(k) + '">' + (ev ? (ev.status === "submitted" ? "เปิดผลประเมินของฉัน" : "ประเมินต่อ") : "เริ่มประเมินคนนี้") + '</button>' +
+            (A.stage(k) === "self" && S.cycle && S.cycle.status === "open" ? '<button class="btn" data-act="self-return" data-id="' + esc(k) + '">ส่งกลับให้แก้ไข</button>' : "") + '</div>'
+            : '<span class="muted small">พี่เลี้ยง: ' + esc(A.mentorName(k) || "ยังไม่มอบหมาย") + '</span>') + '</div>' +
         '<div class="cards">' +
           '<div class="card mini"><span class="label">คะแนนประเมินตนเอง</span><b class="num big2">' + sa.toFixed(2) + '</b><span class="muted small">' + A.grade(sa) + '</span></div>' +
-          '<div class="card mini"><span class="label">คะแนนจาก HR</span><b class="num big2">' + (ma ? ma.toFixed(2) : "–") + '</b><span class="muted small">' + (ma ? mLabel : "ยังไม่ได้ประเมิน") + '</span></div>' +
-          '<div class="card mini"><span class="label">ส่วนต่าง</span><b class="num big2">' + (ma ? diffTag(sa - ma) : "–") + '</b><span class="muted small">ตนเอง − HR</span></div>' +
+          '<div class="card mini"><span class="label">คะแนนจากพี่เลี้ยง</span><b class="num big2">' + (ma ? ma.toFixed(2) : "–") + '</b><span class="muted small">' + (ma ? mLabel : "ยังไม่ได้ประเมิน") + '</span></div>' +
+          '<div class="card mini"><span class="label">ส่วนต่าง</span><b class="num big2">' + (ma ? diffTag(sa - ma) : "–") + '</b><span class="muted small">ตนเอง − พี่เลี้ยง</span></div>' +
           '<div class="card mini"><span class="label">ส่งเมื่อ</span><b class="big2" style="font-size:1.1rem">' + A.fdate(x.submittedAt) + '</b><span class="muted small">ตอบครบ ' + x.scores.filter(Boolean).length + '/' + A.N + ' ข้อ</span></div>' +
         '</div></section>' +
       '<section class="panel stack"><h3>สรุปผลงานจากพนักงาน</h3><div class="note">' + esc(x.comment || "ไม่ได้ระบุ") + '</div></section>' +
       '<section class="panel stack"><div class="sec-h"><h3>คะแนนรายหมวด</h3><span class="stkey"><span><i class="k-self"></i>ตนเอง</span>' + (m ? '<span><i class="k-boss"></i>' + mLabel + '</span>' : "") + '</span></div><div class="cbars">' + cbars + '</div></section>' +
       cats +
-      (m ? '<p class="muted small">แถวสีเหลือง = คะแนนตนเองกับ HR ต่างกัน 2 คะแนนขึ้นไป</p>' : "") +
+      (m ? '<p class="muted small">แถวสีเหลือง = คะแนนตนเองกับพี่เลี้ยงต่างกัน 2 คะแนนขึ้นไป</p>' : "") +
     '</div>';
   };
 })(window.App);

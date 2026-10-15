@@ -1,13 +1,22 @@
-/* ติดตามสถานะการประเมิน (HR) — UC-14: เลือกรอบ, ดูสถานะทุกคน, ตรวจรายการที่ล่าช้าและขยายเวลา */
+/* ติดตามสถานะการประเมิน (HR) — UC-14: เลือกรอบ, ดูสถานะทุกคนและพี่เลี้ยง, ตรวจรายการที่ล่าช้า ขยายเวลา และมอบหมายพี่เลี้ยง */
 (function (A) {
   A.acts = A.acts || {};
   A.acts["late-only"] = function () { A.S.lateOnly = !A.S.lateOnly; A.render(); };
+  A.acts["assign"] = function () {};
+  A.assignMentor = async function (k, mentor) {
+    var S = A.S, name = (S.accounts[k] || {}).name || k;
+    try {
+      await A.api("/assignments/" + encodeURIComponent(k), { method: "PUT", body: JSON.stringify({ mentor: mentor }) });
+      var e = S.employees[k] = S.employees[k] || {}; e.mentor = mentor;
+      S.flash = mentor ? "มอบหมาย " + ((S.accounts[mentor] || {}).name || mentor) + " เป็นพี่เลี้ยงของ " + name + " แล้ว" : "ยกเลิกพี่เลี้ยงของ " + name + " แล้ว";
+    } catch (err) { S.flash = "มอบหมายไม่สำเร็จ: " + err.message; }
+    A.render();
+  };
   A.acts["late-go"] = function () { A.S.lateOnly = true; A.S.view = "table"; A.S.flash = ""; A.render(); window.scrollTo(0, 0); };
 
   A.views.table = function () {
     var S = A.S, esc = A.esc;
-    var emps = Object.keys(S.accounts)
-      .filter(function (k) { return S.accounts[k].role === "evaluatee"; })
+    var emps = A.staff()
       .sort(function (a, b) { return S.accounts[a].name.localeCompare(S.accounts[b].name, "th"); });
     var lateIds = emps.filter(function (k) { return A.lateOf(k).length; });
     var shown = S.lateOnly ? lateIds : emps;
@@ -26,12 +35,18 @@
         return '<span class="pill late">' + l.label + '</span>' + (l.key === "goal" || l.key === "self" ? ' <button class="linkbtn" data-act="ext-pre" data-id="' + esc(k) + '" data-stage="' + l.key + '">ขยายเวลา</button>' : "");
       }).join("<br>") : '<span class="muted">–</span>';
       var ext = ["goal", "self"].map(function (s) { var x = A.extOf(k, s); return x ? '<span class="pill">ขยายถึง ' + A.fday(x.until) + '</span>' : ""; }).join(" ");
-      return '<tr' + A.rowAttrs("table", k) + (late.length ? ' class="is-late"' : "") + '><td><div class="who-cell"><span class="avatar sm">' + A.initial(a.name) + '</span><b>' + esc(a.name) + '</b></div></td><td>' + esc((S.employees[k] || {}).department || "–") + '</td><td>' + A.stagePill(k) + '</td>' +
+      var men = (S.employees[k] || {}).mentor || "", live = S.cycle && S.cycle.status === "open" && !S.viewCycle;
+      var mentors = Object.keys(S.accounts).filter(function (m) { return S.accounts[m].role === "mentor"; });
+      var menCell = live && !A.isFinal(ev)
+        ? '<select class="fsel' + (men ? "" : " warn") + '" data-assign="' + esc(k) + '" aria-label="พี่เลี้ยงของ ' + esc(a.name) + '"><option value="">– ยังไม่มอบหมาย –</option>' +
+            mentors.map(function (m) { return '<option value="' + esc(m) + '"' + (m === men ? " selected" : "") + '>' + esc(S.accounts[m].name) + '</option>'; }).join("") + '</select>'
+        : esc(A.mentorName(k) || "–");
+      return '<tr' + A.rowAttrs("table", k) + (late.length ? ' class="is-late"' : "") + '><td><div class="who-cell"><span class="avatar sm">' + A.initial(a.name) + '</span><b>' + esc(a.name) + '</b></div></td><td>' + esc((S.employees[k] || {}).department || "–") + '</td><td>' + menCell + '</td><td>' + A.stagePill(k) + '</td>' +
         '<td>' + lateHtml + (ext ? '<div>' + ext + '</div>' : "") + '</td>' +
         '<td class="n">' + (sf ? '<button type="button" class="pill self pill-btn" data-act="selfview" data-id="' + esc(k) + '" title="ดูรายละเอียด">' + sf.toFixed(2) + '</button>' : '<span class="muted">–</span>') + '</td><td class="n">' + (avg ? avg.toFixed(2) : "–") + '</td><td class="n"><b>' + (fin ? fin.toFixed(2) : "–") + '</b></td><td>' + (fin ? A.grade(fin) : "–") + '</td>' +
         '<td>' + ack + '</td><td>' + (ev && ev.updatedAt ? A.fdate(ev.updatedAt) : "–") + '</td>' +
-        '<td><div class="row acts"><button class="btn sm" data-act="open" data-id="' + esc(k) + '">' + (ev ? "เปิดดู" : "ประเมิน") + '</button>' +
-        (ev && S.cycle && S.cycle.status === "open" ? '<button class="btn sm danger icon" data-act="del-eval" data-id="' + esc(k) + '" title="ลบผลประเมิน" aria-label="ลบผลประเมินของ ' + esc(a.name) + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>' : "") + '</div></td></tr>';
+        '<td><div class="row acts">' + (ev && ev.status === "submitted" ? '<button class="btn sm' + (ev.dbStatus === "pending_hr" ? " primary" : "") + '" data-act="rv-open" data-id="' + esc(k) + '">' + (ev.dbStatus === "pending_hr" ? "ตรวจสอบ" : "เปิดดู") + '</button>'
+          : A.selfDone(k) ? '<button class="btn sm" data-act="selfview" data-id="' + esc(k) + '">ดูประเมินตนเอง</button>' : '<span class="muted small">รอพี่เลี้ยง</span>') + '</div></td></tr>';
     }).join("");
 
     var st = (S.cycle && S.cycle.stages || []).filter(function (s) { return s.key; }).map(function (s) {
@@ -39,14 +54,14 @@
       return '<span class="due-chip ' + cls + '"><b>' + esc(s.name) + '</b> ถึง ' + A.fday(s.end) + '</span>';
     }).join("");
     return '<div class="stack">' +
-      '<div class="sec-h"><div><h2>ติดตามสถานะการประเมิน</h2><p class="muted small">สถานะของพนักงานทุกคน ตั้งแต่ประเมินตนเองจนถึงรับทราบผล อัปเดตอัตโนมัติ</p></div>' + A.cyclePicker() + '</div>' +
+      '<div class="sec-h"><div><h2>ติดตามสถานะการประเมิน</h2><p class="muted small">สถานะของพนักงานและพี่เลี้ยงทุกคน ตั้งแต่ประเมินตนเองจนถึงรับทราบผล · เลือกพี่เลี้ยงของแต่ละคนได้ในคอลัมน์ "พี่เลี้ยง"</p></div>' + A.cyclePicker() + '</div>' +
       (st ? '<div class="due-chips">' + st + '</div>' : "") +
       A.filterBar("table", shown, { dep: true, pos: true, st: true, placeholder: "ค้นหาชื่อ ตำแหน่ง หรือแผนก" }) +
       '<div class="row"><button type="button" class="btn sm' + (S.lateOnly ? " primary" : "") + '" data-act="late-only">' + (S.lateOnly ? "✓ " : "") + 'เฉพาะรายการที่ล่าช้า (' + lateIds.length + ')</button>' +
         (S.lateOnly ? '<span class="muted small">แสดงพนักงานที่พ้นกำหนดแล้วแต่ยังไม่ดำเนินการ</span>' : "") + '</div>' +
       '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-        '<th>พนักงาน</th><th>แผนก</th><th>สถานะ</th><th>ล่าช้า</th><th>ประเมินตนเอง</th><th>คะแนนประเมิน</th><th>คะแนนสุดท้าย</th><th>ระดับ</th><th>การรับทราบ</th><th>อัปเดตล่าสุด</th><th></th>' +
-      '</tr></thead><tbody>' + (rows || '<tr><td colspan="11" class="empty">' + (S.lateOnly ? "ไม่มีรายการที่ล่าช้า" : "ยังไม่มีรายชื่อพนักงาน") + '</td></tr>') + '</tbody></table></div>' +
+        '<th>พนักงาน</th><th>แผนก</th><th>พี่เลี้ยง</th><th>สถานะ</th><th>ล่าช้า</th><th>ประเมินตนเอง</th><th>คะแนนพี่เลี้ยง</th><th>คะแนนสุดท้าย</th><th>ระดับ</th><th>การรับทราบ</th><th>อัปเดตล่าสุด</th><th></th>' +
+      '</tr></thead><tbody>' + (rows || '<tr><td colspan="12" class="empty">' + (S.lateOnly ? "ไม่มีรายการที่ล่าช้า" : "ยังไม่มีรายชื่อพนักงาน") + '</td></tr>') + '</tbody></table></div>' +
     '</div>';
   };
 })(window.App);

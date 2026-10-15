@@ -21,8 +21,7 @@
 
   function evaluatorView() {
     var S = A.S, esc = A.esc, today = A.todayNo();
-    var emps = Object.keys(S.accounts)
-      .filter(function (k) { return S.accounts[k].role === "evaluatee"; })
+    var emps = A.staff()
       .sort(function (a, b) { return S.accounts[a].name.localeCompare(S.accounts[b].name, "th"); });
 
     var working = A.DAYS.map(function (_, i) {

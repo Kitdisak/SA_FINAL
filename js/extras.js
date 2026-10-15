@@ -87,7 +87,7 @@
   };
 
   /* ---------- กำหนดเวลาแต่ละขั้นตอน (BR-EVAL-03, BR-EVAL-07) ---------- */
-  A.STAGE_KEYS = [["goal", "กำหนดเป้าหมาย"], ["self", "ประเมินตนเอง"], ["evaluate", "HR ประเมินผล"], ["review", "ตรวจสอบ ปรับเทียบ เผยแพร่"]];
+  A.STAGE_KEYS = [["goal", "กำหนดเป้าหมาย"], ["self", "ประเมินตนเอง"], ["evaluate", "พี่เลี้ยงประเมินผล"], ["review", "HR ตรวจสอบ ปรับเทียบ เผยแพร่"]];
   A.fday = function (t) { return A.fdatetime(t); };
   A.addDays = function (t, n) {
     var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t || ""); if (!m) return t;
@@ -118,13 +118,13 @@
     if (w.state === "after") return '<p class="note late">พ้นกำหนดช่วง "' + esc(w.stage.name) + '" แล้ว (สิ้นสุด ' + A.fday(w.until) + ') กรุณาติดต่อ HR เพื่อขออนุมัติขยายเวลา</p>';
     return '<p class="deadline' + (w.left <= 3 ? " soon" : "") + '">กำหนดส่ง: <b>' + A.fday(w.until) + '</b> (' + (w.left > 0 ? "เหลืออีก " + w.left + " วัน" : "วันนี้วันสุดท้าย") + ')' + ext + '</p>';
   };
-  // HR: รายการที่ล่าช้าของพนักงาน 1 คน (UC-14 ขั้นที่ 6)
+  // HR/พี่เลี้ยง: รายการที่ล่าช้าของพนักงาน 1 คน (UC-14 ขั้นที่ 6)
   A.lateOf = function (k) {
     if (!S.cycle || S.cycle.status !== "open") return [];
     var out = [], ev = S.evals[k];
     if (A.win("goal", k).state === "after" && !(S.goals || []).some(function (g) { return g.userId === k; })) out.push({ key: "goal", label: "ยังไม่ส่งเป้าหมาย" });
     if (A.win("self", k).state === "after" && !(A.selfDone && A.selfDone(k))) out.push({ key: "self", label: "ยังไม่ส่งประเมินตนเอง" });
-    if (A.win("evaluate", k).state === "after" && !(ev && ev.status === "submitted")) out.push({ key: "evaluate", label: "HR ยังไม่ประเมิน" });
+    if (A.win("evaluate", k).state === "after" && !(ev && ev.status === "submitted")) out.push({ key: "evaluate", label: "พี่เลี้ยงยังไม่ส่งผล" });
     if (A.win("review", k).state === "after" && ev && ev.status === "submitted" && ["published", "acknowledged"].indexOf(ev.dbStatus) < 0) out.push({ key: "review", label: "ยังไม่เผยแพร่ผล" });
     return out;
   };
@@ -174,12 +174,13 @@
   // ลบผลประเมิน (มีหน้าต่างยืนยัน)
   A.deleteEval = async function (id) {
     var name = (S.accounts[id] || {}).name || id;
-    if (!window.confirm("ลบผลประเมินของ " + name + " ?\n\nคะแนน ความเห็น และข้อความตอบกลับจะถูกลบถาวร กู้คืนไม่ได้")) return;
+    if (!window.confirm("ลบร่างผลประเมินของ " + name + " ?\n\nคะแนนและความเห็นที่บันทึกไว้จะถูกลบถาวร กู้คืนไม่ได้")) return;
     try {
       await A.api("/evaluations/" + encodeURIComponent(id), { method: "DELETE" });
       delete S.evals[id];
-      S.flash = "ลบผลประเมินของ " + name + " แล้ว";
+      S.flash = "ลบร่างผลประเมินของ " + name + " แล้ว";
       if (S.view === "form") { S.view = S.backView || "list"; S.target = null; S.draft = null; }
+    await A.loadSelfs(true);
     } catch (e) {
       S.flash = "ลบไม่สำเร็จ: " + (e.message || "ลองใหม่อีกครั้ง");
     }

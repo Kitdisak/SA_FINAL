@@ -38,8 +38,8 @@
     var gDone = goals.length && ap === goals.length, sDone = x && x.status === "submitted";
     var todos =
       step(gDone, "1. กำหนดเป้าหมาย", goals.length ? "อนุมัติแล้ว " + ap + "/" + goals.length + " ข้อ" : "ยังไม่ได้กำหนดเป้าหมาย (ขั้นต่ำ " + (c.minGoals || 0) + " ข้อ)", "goals", "เป้าหมายของฉัน", due("goal", gDone || goals.some(function (g) { return g.status !== "draft"; }))) +
-      step(sDone, "2. ประเมินตนเองและส่งให้ HR", sDone ? "ส่งแล้วเมื่อ " + A.fdate(x.submittedAt) : x && x.returnReason ? "HR ส่งกลับให้แก้ไข" : x && x.status === "draft" ? "บันทึกร่างไว้ ยังไม่ส่ง" : "ยังไม่ได้ทำ", "self", "ประเมินตนเอง", due("self", sDone)) +
-      step(!!ev, "3. HR ประเมิน ตรวจสอบ และเผยแพร่ผล", ev ? "เผยแพร่ผลแล้วเมื่อ " + A.fdate(ev.publishedAt || ev.submittedAt) : "รอ HR ดำเนินการ", ev ? "mine" : "", "ดูผล") +
+      step(sDone, "2. ประเมินตนเองและส่งให้พี่เลี้ยง", sDone ? "ส่งแล้วเมื่อ " + A.fdate(x.submittedAt) : x && x.returnReason ? "พี่เลี้ยงส่งกลับให้แก้ไข" : x && x.status === "draft" ? "บันทึกร่างไว้ ยังไม่ส่ง" : "ยังไม่ได้ทำ", "self", "ประเมินตนเอง", due("self", sDone)) +
+      step(!!ev, "3. พี่เลี้ยงประเมิน → HR ตรวจสอบและเผยแพร่ผล", ev ? "เผยแพร่ผลแล้วเมื่อ " + A.fdate(ev.publishedAt || ev.submittedAt) : (A.mentorName(S.me.id) ? "พี่เลี้ยง: " + esc(A.mentorName(S.me.id)) + " · " : "") + "รอดำเนินการ", ev ? "mine" : "", "ดูผล") +
       step(ev && ev.ack, "4. ตรวจสอบผลและกดรับทราบ", ev && ev.ack ? "รับทราบแล้วเมื่อ " + A.fdate(ev.ackAt) : "ทำได้เมื่อผลเผยแพร่แล้ว", ev && !ev.ack ? "mine" : "", "รับทราบผล");
     var exts = (c.extensions || []).map(function (e) { return '<li>' + keyName(e.stage) + ': ส่งได้ถึง <b>' + A.fday(e.until) + '</b>' + (e.reason ? ' <span class="muted">(' + esc(e.reason) + ')</span>' : "") + '</li>'; }).join("");
     return '<div class="stack">' + A.cyclePicker() +
@@ -84,7 +84,7 @@
   function extPanel() {
     var esc = A.esc, c = S.cycle, pre = S.extPre || {};
     if (!c || c.status !== "open") return "";
-    var emps = Object.keys(S.accounts).filter(function (k) { return S.accounts[k].role === "evaluatee"; })
+    var emps = A.staff()
       .sort(function (a, b) { return S.accounts[a].name.localeCompare(S.accounts[b].name, "th"); });
     var list = (c.extensions || []).map(function (x) {
       return '<div class="fitem"><span class="avatar sm">' + A.initial((S.accounts[x.userId] || {}).name) + '</span><div class="grow"><b>' + esc((S.accounts[x.userId] || {}).name || x.userId) + '</b>' +
@@ -182,7 +182,7 @@
   A.acts["cyc-current"] = function () { A.switchCycle(null); };
 
   /* ---------- UC-13 HR กำหนดเกณฑ์และแบบประเมิน ---------- */
-  var REQS = [["strengths", "จุดเด่นของพนักงาน (HR)"], ["improvements", "สิ่งที่ควรปรับปรุงโดยรวม (HR)"], ["catComment", "ความเห็นรายหมวดครบ 5 หมวด (HR)"],
+  var REQS = [["strengths", "จุดเด่นของพนักงาน (พี่เลี้ยง)"], ["improvements", "สิ่งที่ควรปรับปรุงโดยรวม (พี่เลี้ยง)"], ["catComment", "ความเห็นรายหมวดครบ 5 หมวด (พี่เลี้ยง)"],
     ["selfComment", "สรุปผลงานของตนเอง (พนักงาน)"], ["selfCatComment", "ความเห็นรายหมวดครบ 5 หมวด (พนักงาน)"]];
   A.scaleRows = function (max) {
     for (var i = 0; i < 5; i++) { var r = document.getElementById("lvrow" + i); if (r) r.hidden = i >= max; }
@@ -211,7 +211,7 @@
     }).join("");
     return '<div class="stack">' +
       '<section class="panel stack"><h2>เกณฑ์และแบบประเมิน</h2>' +
-        '<p class="muted small">แบบประเมินของรอบ "' + esc((S.cycle || {}).name || "") + '" มี 20 ข้อ 5 หมวด ใช้ทั้งการประเมินตนเองและการประเมินของ HR</p>' +
+        '<p class="muted small">แบบประเมินของรอบ "' + esc((S.cycle || {}).name || "") + '" มี 20 ข้อ 5 หมวด ใช้ทั้งการประเมินตนเองและการประเมินของพี่เลี้ยง</p>' +
         (ro ? '<p class="note warn">รอบนี้ปิดแล้ว แก้ไขแบบประเมินไม่ได้</p>' : f.inUse ? '<p class="note warn">รอบนี้มีการให้คะแนนแล้ว: แก้ชื่อหัวข้อ/ชื่อระดับได้ แต่เปลี่ยนจำนวนระดับคะแนนไม่ได้ เพื่อไม่ให้คะแนนเดิมผิดความหมาย (BR-HR-03)</p>' : "") +
         '<div class="field"><label for="fm-name">ชื่อแบบประเมิน</label><input id="fm-name" value="' + esc(f.name) + '" maxlength="100"' + dis + '></div>' +
         '<div class="field"><label for="fm-desc">รายละเอียดแบบประเมิน</label><textarea id="fm-desc"' + dis + '>' + esc(f.description) + '</textarea></div></section>' +

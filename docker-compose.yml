@@ -8,6 +8,7 @@ services:
   oracle:
     image: gvenzl/oracle-free:slim
     container_name: eval-oracle
+    restart: unless-stopped    # เปิดเครื่องใหม่แล้วฐานข้อมูลเริ่มเอง
     environment:
       ORACLE_PASSWORD: ${ORACLE_ADMIN_PASSWORD:-OracleAdmin123}   # รหัส SYS/SYSTEM
       EVAL_APP_PASSWORD: ${DB_PASSWORD:-orcl}                     # รหัสบัญชี EVAL_APP ที่เว็บใช้

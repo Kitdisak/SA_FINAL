@@ -1,8 +1,8 @@
-/* เป้าหมาย: พนักงานกำหนด/ปรับปรุงเป้าหมาย (UC-02) และ HR ตรวจสอบเป้าหมาย (UC-07) */
+/* เป้าหมาย: พนักงานกำหนด/ปรับปรุงเป้าหมาย (UC-02) และพี่เลี้ยงตรวจสอบเป้าหมาย (UC-07) */
 (function (A) {
   var S = A.S;
   A.acts = A.acts || {};
-  var GST = { draft: ["ร่าง", "draft"], pending_review: ["รอ HR ตรวจสอบ", "ask"], approved: ["อนุมัติแล้ว", "done"], returned: ["ส่งกลับแก้ไข", "draft"] };
+  var GST = { draft: ["ร่าง", "draft"], pending_review: ["รอพี่เลี้ยงตรวจสอบ", "ask"], approved: ["อนุมัติแล้ว", "done"], returned: ["ส่งกลับแก้ไข", "draft"] };
   A.goalPill = function (s) { var x = GST[s] || [s, ""]; return '<span class="pill ' + x[1] + '">' + x[0] + '</span>'; };
   function hrCanEdit() { return S.cycle && S.cycle.status === "open" && !S.viewCycle; }
   function canEdit() { return hrCanEdit() && A.win("goal").state === "open"; }   // พนักงาน: ต้องอยู่ในช่วงกำหนดเป้าหมาย (BR-EVAL-07)
@@ -12,7 +12,7 @@
     var esc = A.esc, gs = (S.goals || []).filter(function (g) { return g.userId === uid; });
     var body = gs.length ? gs.map(function (g) {
       return '<div class="goal-mini"><div class="sec-h"><b>' + esc(g.title) + '</b>' + A.goalPill(g.status) + '</div>' + (g.detail ? '<span class="muted small pre">' + esc(g.detail) + '</span>' : "") + '</div>';
-    }).join("") : '<p class="muted small">' + (S.me.role === "evaluator" ? "พนักงานยังไม่ได้ส่งเป้าหมายในรอบนี้" : "ยังไม่ได้กำหนดเป้าหมายในรอบนี้") + '</p>';
+    }).join("") : '<p class="muted small">' + (S.me.role !== "evaluatee" ? "พนักงานยังไม่ได้ส่งเป้าหมายในรอบนี้" : "ยังไม่ได้กำหนดเป้าหมายในรอบนี้") + '</p>';
     return '<details class="goals-box"' + (gs.length ? " open" : "") + '><summary><span>' + esc(title || "เป้าหมายในรอบนี้") + '</span><span class="muted small">' + gs.length + ' ข้อ</span></summary>' + body + '</details>';
   };
 
@@ -31,17 +31,17 @@
       var editable = open && (g.status === "draft" || g.status === "returned");
       return '<div class="goal"><div class="sec-h"><b>' + esc(g.title) + '</b>' + A.goalPill(g.status) + '</div>' +
         (g.detail ? '<p class="muted pre">' + esc(g.detail) + '</p>' : "") +
-        (g.comment ? '<div class="note' + (g.status === "returned" ? " warn" : "") + '"><div class="label">ความเห็นจาก HR</div>' + esc(g.comment) + '</div>' : "") +
+        (g.comment ? '<div class="note' + (g.status === "returned" ? " warn" : "") + '"><div class="label">ความเห็นจากพี่เลี้ยง</div>' + esc(g.comment) + '</div>' : "") +
         (editable ? '<div class="row"><button class="btn sm" data-act="gl-edit" data-id="' + g.id + '">แก้ไข</button><button class="btn sm danger" data-act="gl-del" data-id="' + g.id + '">ลบ</button></div>' : "") + '</div>';
     }).join("");
     return '<div class="stack">' + 
       A.cyclePicker() +
-      '<section class="panel stack"><div class="sec-h"><div><h2>เป้าหมายของฉัน</h2><p class="muted small">กำหนดเป้าหมายการทำงานในรอบนี้ ' + (S.cycle && S.cycle.minGoals ? "อย่างน้อย <b>" + S.cycle.minGoals + " ข้อ</b> " : "") + '(ไม่เกิน 10 ข้อ) ทุกข้อต้องมีรายละเอียด/ตัวชี้วัด แล้วส่งให้ HR ตรวจสอบ เป้าหมายที่ถูกส่งกลับแก้ไขแล้วส่งใหม่ได้</p></div>' +
+      '<section class="panel stack"><div class="sec-h"><div><h2>เป้าหมายของฉัน</h2><p class="muted small">กำหนดเป้าหมายการทำงานในรอบนี้ ' + (S.cycle && S.cycle.minGoals ? "อย่างน้อย <b>" + S.cycle.minGoals + " ข้อ</b> " : "") + '(ไม่เกิน 10 ข้อ) ทุกข้อต้องมีรายละเอียด/ตัวชี้วัด แล้วส่งให้พี่เลี้ยงตรวจสอบ เป้าหมายที่ถูกส่งกลับแก้ไขแล้วส่งใหม่ได้</p></div>' +
         (open && !S.goalEdit && list.length < 10 ? '<button class="btn primary" data-act="gl-new">+ เพิ่มเป้าหมาย</button>' : "") + '</div>' +
         (waiting || !list.length ? A.deadlineNote("goal") : "") +
         (S.goalEdit === "new" ? editor(null) : "") +
         (cards || (S.goalEdit ? "" : '<div class="empty">ยังไม่มีเป้าหมาย กด "เพิ่มเป้าหมาย" เพื่อเริ่ม</div>')) +
-        (open && waiting && !S.goalEdit ? '<div class="row" style="justify-content:flex-end"><span class="muted small">มี ' + waiting + ' ข้อที่ยังไม่ได้ส่ง</span><button class="btn primary" data-act="gl-submit">ส่งให้ HR ตรวจสอบ</button></div>' : "") +
+        (open && waiting && !S.goalEdit ? '<div class="row" style="justify-content:flex-end"><span class="muted small">มี ' + waiting + ' ข้อที่ยังไม่ได้ส่ง</span><button class="btn primary" data-act="gl-submit">ส่งให้พี่เลี้ยงตรวจสอบ</button></div>' : "") +
       '</section></div>';
   };
   A.loadGoals = async function () {
@@ -61,7 +61,7 @@
     var id = S.goalEdit;
     try {
       await A.api(id === "new" ? "/goals" : "/goals/" + id, { method: id === "new" ? "POST" : "PUT", body: JSON.stringify({ title: title, detail: detail }) });
-      S.goalEdit = null; S.flash = "บันทึกเป้าหมายแล้ว (ยังไม่ได้ส่งให้ HR)"; await A.loadGoals(); A.render();
+      S.goalEdit = null; S.flash = "บันทึกเป้าหมายแล้ว (ยังไม่ได้ส่งให้พี่เลี้ยง)"; await A.loadGoals(); A.render();
     } catch (e) { m.textContent = e.message; }
   };
   A.acts["gl-del"] = function (t) { if (window.confirm("ลบเป้าหมายนี้?")) goalCall("/goals/" + t.getAttribute("data-id"), "DELETE", null, "ลบเป้าหมายแล้ว"); };
@@ -70,10 +70,10 @@
     var miss = list.find(function (g) { return (g.status === "draft" || g.status === "returned") && !g.detail.trim(); });
     if (list.length < min) { S.flash = "ต้องกำหนดเป้าหมายอย่างน้อย " + min + " ข้อก่อนส่ง (ตอนนี้มี " + list.length + " ข้อ)"; A.render(); return; }
     if (miss) { S.flash = "กรุณาระบุรายละเอียด/ตัวชี้วัดของเป้าหมาย \"" + miss.title + "\" ก่อนส่ง"; A.render(); return; }
-    if (window.confirm("ส่งเป้าหมายให้ HR ตรวจสอบ?\n\nระหว่างรอตรวจสอบจะแก้ไขไม่ได้")) goalCall("/goals/submit", "POST", {}, "ส่งเป้าหมายให้ HR ตรวจสอบแล้ว");
+    if (window.confirm("ส่งเป้าหมายให้พี่เลี้ยงตรวจสอบ?\n\nระหว่างรอตรวจสอบจะแก้ไขไม่ได้")) goalCall("/goals/submit", "POST", {}, "ส่งเป้าหมายให้พี่เลี้ยงตรวจสอบแล้ว");
   };
 
-  /* ---------- UC-07 HR ตรวจสอบเป้าหมาย ---------- */
+  /* ---------- UC-07 พี่เลี้ยงตรวจสอบเป้าหมาย ---------- */
   A.pendingGoals = function () { return (S.goals || []).filter(function (g) { return g.status === "pending_review"; }).length; };
   A.views.goalreview = function () {
     var esc = A.esc, tab = S.goalTab || "pending", list = S.goals || [];
@@ -81,21 +81,21 @@
     list.forEach(function (g) { (by[g.userId] = by[g.userId] || []).push(g); });
     var ids = Object.keys(by).filter(function (k) { return tab === "all" || by[k].some(function (g) { return g.status === "pending_review"; }); })
       .sort(function (a, b) { return ((S.accounts[a] || {}).name || a).localeCompare((S.accounts[b] || {}).name || b, "th"); });
-    var none = Object.keys(S.accounts).filter(function (k) { return S.accounts[k].role === "evaluatee" && !by[k]; }).length;
+    var none = A.staff().filter(function (k) { return !by[k]; }).length;
     var cards = ids.map(function (k) {
       var a = S.accounts[k] || { name: k }, dep = (S.employees[k] || {}).department;
       var gs = by[k].filter(function (g) { return tab === "all" || g.status === "pending_review"; }).map(function (g) {
         var pend = g.status === "pending_review";
         return '<div class="goal"><div class="sec-h"><b>' + esc(g.title) + '</b>' + A.goalPill(g.status) + '</div>' +
           (g.detail ? '<p class="muted pre">' + esc(g.detail) + '</p>' : "") +
-          (g.comment ? '<div class="note"><div class="label">ความเห็น HR</div>' + esc(g.comment) + '</div>' : "") +
-          (pend && hrCanEdit() ? '<div class="row"><button class="btn sm primary" data-act="gr-ok" data-id="' + g.id + '">อนุมัติ</button><button class="btn sm" data-act="gr-back" data-id="' + g.id + '">ส่งกลับให้แก้ไข</button></div>' : "") + '</div>';
+          (g.comment ? '<div class="note"><div class="label">ความเห็นพี่เลี้ยง</div>' + esc(g.comment) + '</div>' : "") +
+          (pend && hrCanEdit() && S.me.role === "mentor" ? '<div class="row"><button class="btn sm primary" data-act="gr-ok" data-id="' + g.id + '">อนุมัติ</button><button class="btn sm" data-act="gr-back" data-id="' + g.id + '">ส่งกลับให้แก้ไข</button></div>' : "") + '</div>';
       }).join("");
       return '<section class="panel stack"><div class="who-cell"><span class="avatar sm">' + A.initial(a.name) + '</span><div><b>' + esc(a.name) + '</b><span class="muted small"> ' + esc(dep || "") + '</span></div></div>' + gs + '</section>';
     }).join("");
     var pend = A.pendingGoals();
     return '<div class="stack">' + 
-      '<div class="sec-h"><div><h2>ตรวจสอบเป้าหมาย</h2><p class="muted small">อนุมัติเป้าหมายของพนักงาน หรือส่งกลับให้แก้ไขพร้อมเหตุผล · ยังไม่ส่งเป้าหมาย ' + none + ' คน</p></div>' +
+      '<div class="sec-h"><div><h2>ตรวจสอบเป้าหมาย</h2><p class="muted small">อนุมัติเป้าหมายของพนักงานในความดูแล หรือส่งกลับให้แก้ไขพร้อมเหตุผล · ยังไม่ส่งเป้าหมาย ' + none + ' คน</p></div>' +
         '<div class="tabs"><button class="' + (tab === "pending" ? "on" : "") + '" data-act="gr-tab" data-tab="pending">รอตรวจสอบ (' + pend + ')</button><button class="' + (tab === "all" ? "on" : "") + '" data-act="gr-tab" data-tab="all">ทั้งหมด</button></div></div>' +
       (cards || '<section class="panel empty">' + (tab === "pending" ? "ไม่มีเป้าหมายที่รอตรวจสอบ" : "ยังไม่มีพนักงานส่งเป้าหมาย") + '</section>') + '</div>';
   };

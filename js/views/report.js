@@ -1,11 +1,11 @@
-/* HR ดูรายงานสรุปผลการประเมิน (UC-17) — ใช้เฉพาะผลที่ยืนยันแล้ว */
+/* ผู้บริหาร (และ HR) ดูรายงานสรุปผลการประเมิน (UC-17) — ใช้เฉพาะผลที่ HR ยืนยันแล้ว */
 (function (A) {
   var S = A.S;
   A.acts = A.acts || {};
   var GRADES = ["ดีเยี่ยม", "ดี", "ตามเกณฑ์", "ต้องปรับปรุง", "ต้องปรับปรุงมาก"];
 
   function data() {
-    var emps = Object.keys(S.accounts).filter(function (k) { return S.accounts[k].role === "evaluatee"; });
+    var emps = A.staff();
     var rows = emps.map(function (k) {
       var a = S.accounts[k], e = S.employees[k] || {}, ev = S.evals[k], sx = A.selfOf(k);
       var fin = A.isFinal(ev) ? ev.finalScores : null;
@@ -56,7 +56,7 @@
       '</div>' +
       (done.length ? '<div class="dash">' +
         '<section class="panel stack"><h3>การกระจายตามระดับผลการประเมิน</h3><div class="cbars">' + grades + '</div></section>' +
-        '<section class="panel stack"><h3>คะแนนเฉลี่ยรายหมวด</h3><div class="cbars">' + cats + '</div></section></div>' : '<section class="panel empty">ยังไม่มีผลที่ยืนยันแล้ว ยืนยันผลได้ที่หน้า "ตรวจสอบและยืนยันผล"</section>') +
+        '<section class="panel stack"><h3>คะแนนเฉลี่ยรายหมวด</h3><div class="cbars">' + cats + '</div></section></div>' : '<section class="panel empty">ไม่มีข้อมูลผลการประเมินที่ได้รับการยืนยันในรอบนี้' + (S.me.role === "evaluator" ? ' (ยืนยันผลได้ที่หน้า "ตรวจสอบและยืนยันผล")' : "") + '</section>') +
       '<section class="stack"><h3>สรุปรายแผนก</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>แผนก</th><th>พนักงาน</th><th>ยืนยันแล้ว</th><th>ตนเองเฉลี่ย</th><th>คะแนนสุดท้ายเฉลี่ย</th><th>ระดับ</th></tr></thead><tbody>' + depRows + '</tbody></table></div></section>' +
       (people ? '<section class="stack"><h3>ผลรายบุคคล (เรียงตามคะแนนสุดท้าย)</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>พนักงาน</th><th>แผนก</th><th>คะแนนตนเอง</th><th>คะแนนสุดท้าย</th><th>ระดับ</th><th>สถานะ</th></tr></thead><tbody>' + people + '</tbody></table></div></section>' : "") +
     '</div>';

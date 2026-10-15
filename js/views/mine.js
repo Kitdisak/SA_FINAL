@@ -6,7 +6,7 @@
 
     if (!ev || ev.status !== "submitted") {
       return A.cyclePicker() + '<section class="panel empty"><h2 style="margin-bottom:8px;color:var(--ink)">ยังไม่มีผลประเมิน</h2>' +
-        '<p>เมื่อ HR เผยแพร่ผลแล้ว คะแนนและข้อเสนอแนะจะแสดงที่หน้านี้</p></section>';
+        '<p>เมื่อพี่เลี้ยงประเมินและ HR ตรวจสอบ เผยแพร่ผลแล้ว คะแนนและข้อเสนอแนะจะแสดงที่หน้านี้</p></section>';
     }
 
     var a = A.avg(ev.scores);
@@ -32,16 +32,16 @@
 
     return (S.flash ? '<p class="flash" style="margin-bottom:16px">' + esc(S.flash) + '</p>' : "") + '<div class="stack">' + A.cyclePicker() +
       '<section class="panel stack"><div class="hero"><div><div class="label">คะแนนเฉลี่ยรวม</div><div class="big">' + a.toFixed(2) + '<small> / ' + A.MAX + '</small></div></div>' +
-      '<div><div class="grade">' + A.grade(a) + '</div><p class="muted small">ประเมินโดย ' + esc(ev.evaluatorName || "") + ' · ' + A.fdate(ev.submittedAt) + '</p>' + (selfOn ? '<p class="muted small">คะแนนที่ประเมินตนเอง <b class="num">' + A.avg(me.scores).toFixed(2) + '</b></p>' : "") + '</div></div></section>' +
+      '<div><div class="grade">' + A.grade(a) + '</div><p class="muted small">พี่เลี้ยง ' + esc(ev.evaluatorName || "") + ' · ' + A.fdate(ev.submittedAt) + '</p>' + (selfOn ? '<p class="muted small">คะแนนที่ประเมินตนเอง <b class="num">' + A.avg(me.scores).toFixed(2) + '</b></p>' : "") + '</div></div></section>' +
       '<section class="panel stack"><h3>คะแนนรายหมวด</h3><div class="cbars">' + cbars + '</div></section>' +
       '<section class="panel stack"><h3>รายละเอียดรายข้อ</h3><div>' + det + '</div></section>' +
-      '<section class="panel stack"><h3>ความเห็นจาก HR</h3>' +
-      (ev.summary ? '<div><div class="label">ข้อสรุปฉบับสุดท้าย</div><div class="note">' + esc(ev.summary) + '</div></div>' : "") +
-      '<div><div class="label">จุดเด่น</div><div class="note">' + esc(ev.strengths || "ไม่ได้ระบุ") + '</div></div>' +
-      '<div><div class="label">สิ่งที่ควรปรับปรุง</div><div class="note warn">' + esc(ev.improvements || "ไม่ได้ระบุ") + '</div></div></section>' +
+      '<section class="panel stack"><h3>ความเห็นจากพี่เลี้ยงและ HR</h3>' +
+      (ev.summary ? '<div><div class="label">ข้อสรุปฉบับสุดท้าย (HR)</div><div class="note">' + esc(ev.summary) + '</div></div>' : "") +
+      '<div><div class="label">จุดเด่น (พี่เลี้ยง)</div><div class="note">' + esc(ev.strengths || "ไม่ได้ระบุ") + '</div></div>' +
+      '<div><div class="label">สิ่งที่ควรปรับปรุง (พี่เลี้ยง)</div><div class="note warn">' + esc(ev.improvements || "ไม่ได้ระบุ") + '</div></div></section>' +
       (S.viewCycle ? '<section class="panel stack"><h3>การรับทราบ</h3>' + ackBox + (ev.reply ? '<div><div class="label">ข้อสงสัยที่ส่งไว้</div><div class="note warn">' + esc(ev.reply) + '</div></div>' : "") + '</section></div>' :
       '<section class="panel stack"><h3>ตรวจสอบและตอบกลับ</h3>' +
-      '<div class="field"><label for="reply">ข้อสงสัยหรือความเห็นถึง HR</label><textarea id="reply" data-f="reply" placeholder="หากไม่เห็นด้วยกับข้อใด พิมพ์ได้ที่นี่">' + esc(S.replyDraft) + '</textarea></div>' +
+      '<div class="field"><label for="reply">ข้อสงสัยหรือความเห็นถึงพี่เลี้ยงและ HR</label><textarea id="reply" data-f="reply" maxlength="1300" placeholder="หากไม่เห็นด้วยกับข้อใด พิมพ์ได้ที่นี่">' + esc(S.replyDraft) + '</textarea></div>' +
       '<div class="row"><button class="btn" data-act="reply">ส่งข้อความ</button>' + ackBox + '</div></section></div>');
   };
 })(window.App);

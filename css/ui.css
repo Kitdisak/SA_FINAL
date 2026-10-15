@@ -298,3 +298,9 @@ input:disabled,textarea:disabled,select:disabled{opacity:.7;cursor:not-allowed}
 .cr-item input.sub{padding:7px 12px}
 .cat-in{font-size:1.02rem}
 .field select,.st-row select,.grid3 select,.grid4 select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;min-width:0}
+
+/* ---------- 4 บทบาท: มอบหมายพี่เลี้ยง / ภาพรวมผู้บริหาร ---------- */
+.fsel.warn { border-color: var(--warn, #c77700); }
+.tbl .fsel { min-width: 150px; }
+.mini-track { display: inline-block; width: 80px; height: 6px; vertical-align: middle; margin-right: 6px; }
+div.pipe-i { cursor: default; }

@@ -6,10 +6,10 @@
   // สถานะของพนักงาน 1 คนในกระบวนการ (ตามภาคผนวก ข)
   var STAGE = {
     none:         ["ยังไม่ประเมิน", ""],
-    self:         ["รอ HR ประเมิน", "self"],
+    self:         ["รอพี่เลี้ยงประเมิน", "self"],
     returned:     ["ส่งกลับแก้ไข", "draft"],
-    draft:        ["ร่าง", "draft"],
-    pending_hr:   ["รอตรวจสอบ/ปรับเทียบ", "ask"],
+    draft:        ["พี่เลี้ยงกำลังประเมิน (ร่าง)", "draft"],
+    pending_hr:   ["รอ HR ตรวจสอบ", "ask"],
     confirmed:    ["ยืนยันแล้ว รอเผยแพร่", "self"],
     published:    ["เผยแพร่แล้ว", "done"],
     acknowledged: ["รับทราบแล้ว", "done"]
@@ -44,21 +44,21 @@
         : d === "confirmed" ? '<button class="btn sm primary" data-act="rv-pub1" data-id="' + esc(k) + '">เผยแพร่</button><button class="btn sm" data-act="rv-open" data-id="' + esc(k) + '">ดู</button>'
         : '<button class="btn sm" data-act="rv-open" data-id="' + esc(k) + '">ดู</button>';
       return '<tr data-st="' + (d === "published" || d === "acknowledged" ? "submitted" : d === "confirmed" ? "draft" : "none") + '"><td><div class="who-cell"><span class="avatar sm">' + A.initial(a.name) + '</span><b>' + esc(a.name) + '</b></div></td>' +
-        '<td>' + esc((S.employees[k] || {}).department || "–") + '</td><td>' + A.stagePill(k) + '</td>' +
+        '<td>' + esc((S.employees[k] || {}).department || "–") + '<div class="muted small">พี่เลี้ยง ' + esc(ev.evaluatorName || "–") + '</div></td><td>' + A.stagePill(k) + '</td>' +
         '<td class="n">' + (sa ? sa.toFixed(2) : "–") + '</td><td class="n">' + ma.toFixed(2) + '</td>' +
         '<td class="n"><b>' + (fa ? fa.toFixed(2) : "–") + '</b></td><td>' + (fa ? A.grade(fa) : "–") + '</td>' +
         '<td><div class="row acts">' + act + '</div></td></tr>';
     }).join("");
     return '<div class="stack">' + 
-      '<div class="sec-h"><div><h2>ตรวจสอบและยืนยันผล</h2><p class="muted small">ตรวจสอบผลที่ประเมินแล้ว ปรับเทียบคะแนนให้มาตรฐานเดียวกัน ยืนยันผล แล้วเผยแพร่ให้พนักงาน</p></div>' +
+      '<div class="sec-h"><div><h2>ตรวจสอบและยืนยันผล</h2><p class="muted small">ตรวจสอบผลที่พี่เลี้ยงส่งมา ปรับเทียบคะแนนให้มาตรฐานเดียวกัน (หรือส่งกลับให้พี่เลี้ยงแก้ไข) ยืนยันผล แล้วเผยแพร่ให้พนักงาน</p></div>' +
         (conf && live ? '<button class="btn primary" data-act="rv-puball">เผยแพร่ผลที่ยืนยันแล้ว (' + conf + ' คน)</button>' : "") + '</div>' +
       '<div class="cards">' +
         '<div class="card mini"><span class="label">รอตรวจสอบ/ปรับเทียบ</span><b class="num big2">' + cnt("pending_hr") + '</b></div>' +
         '<div class="card mini"><span class="label">ยืนยันแล้ว รอเผยแพร่</span><b class="num big2">' + conf + '</b></div>' +
         '<div class="card mini"><span class="label">เผยแพร่แล้ว</span><b class="num big2">' + (cnt("published") + cnt("acknowledged")) + '</b></div>' +
         '<div class="card mini"><span class="label">พนักงานรับทราบแล้ว</span><b class="num big2">' + cnt("acknowledged") + '</b></div></div>' +
-      '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>พนักงาน</th><th>แผนก</th><th>สถานะ</th><th>คะแนนตนเอง</th><th>คะแนนประเมิน</th><th>คะแนนสุดท้าย</th><th>ระดับ</th><th></th></tr></thead>' +
-      '<tbody>' + (rows || '<tr><td colspan="8" class="empty">ยังไม่มีผลที่ส่งให้ตรวจสอบ (ส่งผลจากหน้า "ประเมินพนักงาน")</td></tr>') + '</tbody></table></div></div>';
+      '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>พนักงาน</th><th>แผนก</th><th>สถานะ</th><th>คะแนนตนเอง</th><th>คะแนนพี่เลี้ยง</th><th>คะแนนสุดท้าย</th><th>ระดับ</th><th></th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="8" class="empty">ยังไม่มีผลที่พี่เลี้ยงส่งให้ตรวจสอบ</td></tr>') + '</tbody></table></div></div>';
   };
 
   /* ---------- ปรับเทียบรายคน ---------- */
@@ -80,25 +80,25 @@
           '<span class="sv self">' + (self ? self[i] : "–") + '</span><span class="sv">' + ev.scores[i] + '</span>' + sel + '</div>';
       }).join("");
       return '<section class="panel stack"><h3>' + (ci + 1) + '. ' + esc(c.name) + '</h3>' +
-        '<div class="cmp-head cmp4"><span></span><span></span><span>ตนเอง</span><span>ประเมิน</span><span>สุดท้าย</span></div>' + items +
-        (ev.cc && ev.cc[ci] ? '<div class="note warn"><div class="label">ความเห็นจากขั้นประเมิน</div>' + esc(ev.cc[ci]) + '</div>' : "") + '</section>';
+        '<div class="cmp-head cmp4"><span></span><span></span><span>ตนเอง</span><span>พี่เลี้ยง</span><span>สุดท้าย</span></div>' + items +
+        (ev.cc && ev.cc[ci] ? '<div class="note warn"><div class="label">ความเห็นจากพี่เลี้ยง</div>' + esc(ev.cc[ci]) + '</div>' : "") + '</section>';
     }).join("");
     var fa = A.avg(base);
     if (S.auditFor !== k) { S.auditFor = k; S.auditRows = null; A.loadAudit(k); }
     var hist = (S.auditRows || []).map(A.auditItem).join("");
     var btns = edit
-      ? '<button class="btn" data-act="rv-save">บันทึกการปรับเทียบ</button><button class="btn primary" data-act="rv-confirm">บันทึกและยืนยันผล</button>'
+      ? '<button class="btn" data-act="rv-save">บันทึกการปรับเทียบ</button><button class="btn primary" data-act="rv-confirm">บันทึกและยืนยันผล</button><button class="btn danger" data-act="rv-return" data-id="' + esc(k) + '">ส่งกลับให้พี่เลี้ยงแก้ไข</button>'
       : ev.dbStatus === "confirmed" ? '<button class="btn" data-act="rv-unconfirm" data-id="' + esc(k) + '">ยกเลิกการยืนยัน</button><button class="btn primary" data-act="rv-pub1" data-id="' + esc(k) + '">เผยแพร่ผลให้พนักงาน</button>' : "";
     return '<div class="stack">' + back + 
       '<section class="panel stack"><div class="sec-h"><div class="who-cell"><span class="avatar">' + A.initial(a.name) + '</span><div><h2>' + esc(a.name) + '</h2><p class="muted small">' + esc(a.position || "") + ' · ' + esc((S.employees[k] || {}).department || "") + '</p></div></div>' + A.stagePill(k) + '</div>' +
         '<div class="cards">' +
           '<div class="card mini"><span class="label">คะแนนประเมินตนเอง</span><b class="num big2">' + (self ? A.avg(self).toFixed(2) : "–") + '</b></div>' +
-          '<div class="card mini"><span class="label">คะแนนจากขั้นประเมิน</span><b class="num big2">' + A.avg(ev.scores).toFixed(2) + '</b><span class="muted small">ประเมินโดย ' + esc(ev.evaluatorName || "") + '</span></div>' +
+          '<div class="card mini"><span class="label">คะแนนจากพี่เลี้ยง</span><b class="num big2">' + A.avg(ev.scores).toFixed(2) + '</b><span class="muted small">ประเมินโดย ' + esc(ev.evaluatorName || "") + '</span></div>' +
           '<div class="card mini"><span class="label">คะแนนสุดท้าย (หลังปรับเทียบ)</span><b class="num big2" id="cbAvg">' + fa.toFixed(2) + '</b><span class="muted small" id="cbGrade">' + A.grade(fa) + '</span></div></div>' +
-        (edit ? '<p class="muted small">ปรับช่อง "สุดท้าย" ได้เฉพาะข้อที่ต้องการ ข้อที่ปรับจะเป็นสีม่วง ถ้าไม่ปรับเลย ระบบใช้คะแนนจากขั้นประเมินเป็นคะแนนสุดท้าย</p>' : "") + '</section>' +
+        (edit ? '<p class="muted small">ปรับช่อง "สุดท้าย" ได้เฉพาะข้อที่ต้องการ ข้อที่ปรับจะเป็นสีม่วง ถ้าไม่ปรับเลย ระบบใช้คะแนนของพี่เลี้ยงเป็นคะแนนสุดท้าย ถ้าข้อมูลไม่ครบหรือไม่สอดคล้อง กด "ส่งกลับให้พี่เลี้ยงแก้ไข"</p>' : "") + '</section>' +
       gl + cats +
       '<section class="panel stack"><h3>ข้อสรุปฉบับสุดท้าย</h3>' +
-        '<div class="row2"><div><div class="label">จุดเด่น (ขั้นประเมิน)</div><div class="note">' + esc(ev.strengths || "–") + '</div></div><div><div class="label">สิ่งที่ควรปรับปรุง (ขั้นประเมิน)</div><div class="note warn">' + esc(ev.improvements || "–") + '</div></div></div>' +
+        '<div class="row2"><div><div class="label">จุดเด่น (จากพี่เลี้ยง)</div><div class="note">' + esc(ev.strengths || "–") + '</div></div><div><div class="label">สิ่งที่ควรปรับปรุง (จากพี่เลี้ยง)</div><div class="note warn">' + esc(ev.improvements || "–") + '</div></div></div>' +
         (edit ? '<div class="field"><label for="cbSum">ข้อสรุป / ข้อเสนอแนะฉบับสุดท้าย (พนักงานจะเห็นข้อความนี้)</label><textarea id="cbSum" placeholder="สรุปผลการปรับเทียบ และข้อเสนอแนะ">' + esc(ev.summary || "") + '</textarea></div>'
           : '<div><div class="label">ข้อสรุปฉบับสุดท้าย</div><div class="note">' + esc(ev.summary || "ไม่ได้ระบุ") + '</div></div>') +
         (ev.reply ? '<div><div class="label">ข้อสงสัยจากพนักงาน</div><div class="note warn">' + esc(ev.reply) + '</div></div>' : "") +
@@ -136,6 +136,15 @@
       await post("/reviews/" + encodeURIComponent(S.calibId) + "/confirm");
       await refreshEvals(); S.flash = "ยืนยันผลของ " + name + " แล้ว พร้อมเผยแพร่"; S.view = "reviews"; A.render(); window.scrollTo(0, 0);
     } catch (e) { m.textContent = e.message; }
+  };
+  A.acts["rv-return"] = async function (t) {
+    var k = t.getAttribute("data-id"), name = (S.accounts[k] || {}).name || k;
+    var reason = window.prompt("ส่งผลประเมินของ " + name + " กลับให้พี่เลี้ยงแก้ไข\n\nเหตุผล / สิ่งที่ต้องแก้ไข:", "");
+    if (reason == null) return;
+    if (!reason.trim()) { S.flash = "กรุณาระบุเหตุผลที่ส่งกลับ"; A.render(); return; }
+    try { await post("/reviews/" + encodeURIComponent(k) + "/return", { reason: reason.trim() }); await refreshEvals(); S.flash = "ส่งผลของ " + name + " กลับให้พี่เลี้ยงแก้ไขแล้ว"; S.view = "reviews"; }
+    catch (e) { S.flash = "ไม่สำเร็จ: " + e.message; }
+    A.render(); window.scrollTo(0, 0);
   };
   A.acts["rv-unconfirm"] = async function (t) {
     try { await post("/reviews/" + encodeURIComponent(t.getAttribute("data-id")) + "/unconfirm"); await refreshEvals(); S.auditFor = null; S.flash = "ยกเลิกการยืนยันแล้ว แก้ไขการปรับเทียบได้"; }

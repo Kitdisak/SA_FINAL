@@ -7,8 +7,8 @@ if [ ! -f .env ]; then
   cp .env.example .env
   echo "สร้าง server/.env จาก .env.example แล้ว"
 fi
-# ค่าสำหรับ Oracle ใน Codespace (container oracle ใช้เครือข่ายเดียวกัน จึงเป็น localhost)
-sed -i 's#^DB_CONNECT_STRING=.*#DB_CONNECT_STRING=localhost:1521/FREEPDB1#' .env
+# ค่าสำหรับ Oracle ใน Codespace (container oracle ใช้เครือข่ายเดียวกัน จึงเป็น 127.0.0.1 — ไม่ใช้ localhost เพราะ Node จะไปต่อ IPv6 ::1 แล้วต่อไม่ได้)
+sed -i 's#^DB_CONNECT_STRING=.*#DB_CONNECT_STRING=127.0.0.1:1521/FREEPDB1#' .env
 sed -i 's#^DB_PASSWORD=ChangeThisPassword!$#DB_PASSWORD=orcl#' .env
 
 npm install --no-audit --no-fund

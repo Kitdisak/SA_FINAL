@@ -3,6 +3,15 @@
 (function (A) {
   var STATUS = [["none", "ยังไม่ประเมิน"], ["draft", "ร่าง"], ["submitted", "ส่งผลแล้ว"]];
 
+  // พนักงานที่ผู้ใช้เห็น: HR/ผู้บริหาร = ทุกคน, พี่เลี้ยง = เฉพาะที่ได้รับมอบหมาย (UC-07/08 Exception 2)
+  A.staff = function () {
+    var S = A.S, men = S.me && S.me.role === "mentor";
+    return Object.keys(S.accounts).filter(function (k) {
+      return S.accounts[k].role === "evaluatee" && (!men || (S.employees[k] && S.employees[k].mentor === S.me.id));
+    });
+  };
+  A.mentorName = function (k) { var m = (A.S.employees[k] || {}).mentor; return m ? ((A.S.accounts[m] || {}).name || m) : ""; };
+
   A.filterState = function (view) {
     var all = A.S.filters = A.S.filters || {};
     return all[view] || (all[view] = { q: "", dep: "", pos: "", st: "" });

@@ -6,7 +6,7 @@
     OPEN_CYCLE: "เปิดรอบการประเมิน", CREATE_CYCLE: "สร้างรอบการประเมิน", UPDATE_CYCLE: "แก้ไขรอบการประเมิน", CLOSE_CYCLE: "ปิดรอบการประเมิน",
     UPDATE_FORM: "แก้ไขเกณฑ์และแบบประเมิน", CREATE_GOAL: "เพิ่มเป้าหมาย", UPDATE_GOAL: "แก้ไขเป้าหมาย", DELETE_GOAL: "ลบเป้าหมาย",
     SUBMIT_GOALS: "ส่งเป้าหมายให้ตรวจสอบ", APPROVE_GOAL: "อนุมัติเป้าหมาย", RETURN_GOAL: "ส่งเป้าหมายกลับให้แก้ไข",
-    SELF_SAVE_DRAFT: "บันทึกร่างประเมินตนเอง", SELF_SUBMIT: "ส่งแบบประเมินตนเอง", RETURN_SELF: "ส่งแบบประเมินตนเองกลับให้แก้ไข",
+    SELF_SAVE_DRAFT: "บันทึกร่างประเมินตนเอง", SELF_SUBMIT: "ส่งแบบประเมินตนเอง", RETURN_SELF: "พี่เลี้ยงส่งแบบประเมินตนเองกลับให้แก้ไข", RETURN_TO_MENTOR: "HR ส่งผลประเมินกลับให้พี่เลี้ยงแก้ไข", ASSIGN_MENTOR: "มอบหมายพี่เลี้ยง",
     SAVE_DRAFT: "บันทึกร่างการประเมิน", SUBMIT: "ส่งผลประเมินให้ตรวจสอบ", CALIBRATE: "ปรับเทียบคะแนน", CONFIRM: "ยืนยันผลการประเมิน",
     UNCONFIRM: "ยกเลิกการยืนยันผล", PUBLISH: "เผยแพร่ผลการประเมิน", ACKNOWLEDGE: "พนักงานรับทราบผล", REPLY: "ส่งข้อสงสัย", RESET: "ลบผลการประเมิน",
     EXTEND_DEADLINE: "อนุมัติขยายเวลา", CANCEL_EXTENSION: "ยกเลิกการขยายเวลา", CHANGE_SHIFT: "เปลี่ยนกะทำงาน", CHANGE_PIN: "เปลี่ยน PIN", RESET_PIN: "รีเซ็ต PIN"

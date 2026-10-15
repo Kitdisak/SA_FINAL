@@ -24,20 +24,34 @@
 
   // เมนูตามบทบาท: view = ชื่อหน้าใน A.views
   A.NAV = {
-    evaluator: [   // HR: UC-07 ถึง UC-18
+    evaluator: [   // HR: UC-12 ถึง UC-16 (+ มอบหมายพี่เลี้ยง ขยายเวลา ประวัติการเปลี่ยนแปลง)
       { group: "ภาพรวม", view: "home",  icon: "home",  label: "หน้าหลัก" },
       { group: "ภาพรวม", view: "notifications", icon: "bell", label: "แจ้งเตือน", count: "unread" },
       { group: "ตั้งค่าการประเมิน", view: "cycles", icon: "cal", label: "รอบการประเมิน" },
       { group: "ตั้งค่าการประเมิน", view: "criteria", icon: "sliders", label: "เกณฑ์และแบบประเมิน" },
-      { group: "การประเมิน", view: "goalreview", icon: "target", label: "ตรวจสอบเป้าหมาย", count: "goals" },
-      { group: "การประเมิน", view: "selfs", icon: "pen", label: "แบบประเมินตนเอง", count: "selfwait" },
-      { group: "การประเมิน", view: "list",  icon: "users", label: "ประเมินพนักงาน" },
-      { group: "การประเมิน", view: "reviews", icon: "check", label: "ตรวจสอบและยืนยันผล", count: "reviews" },
       { group: "การประเมิน", view: "table", icon: "table", label: "ติดตามสถานะ", count: "replies" },
+      { group: "การประเมิน", view: "reviews", icon: "check", label: "ตรวจสอบและยืนยันผล", count: "reviews" },
       { group: "รายงาน", view: "report", icon: "chart", label: "รายงานสรุปผล" },
       { group: "รายงาน", view: "audit", icon: "clock", label: "ประวัติการเปลี่ยนแปลง" },
       { group: "พนักงาน", view: "employees", icon: "id", label: "ประวัติพนักงาน" },
       { group: "พนักงาน", view: "schedule", icon: "clock", label: "ตารางเวลางาน" },
+      { group: "บัญชี", view: "me", icon: "id", label: "ข้อมูลของฉัน" },
+      { group: "บัญชี", view: "pin", icon: "key", label: "เปลี่ยน PIN" }
+    ],
+    mentor: [      // พี่เลี้ยง: UC-07 ถึง UC-11 (เฉพาะพนักงานที่ได้รับมอบหมาย)
+      { group: "ภาพรวม", view: "home", icon: "home", label: "หน้าหลัก" },
+      { group: "ภาพรวม", view: "notifications", icon: "bell", label: "แจ้งเตือน", count: "unread" },
+      { group: "พนักงานในความดูแล", view: "goalreview", icon: "target", label: "ตรวจสอบเป้าหมาย", count: "goals" },
+      { group: "พนักงานในความดูแล", view: "selfs", icon: "pen", label: "แบบประเมินตนเอง", count: "selfwait" },
+      { group: "พนักงานในความดูแล", view: "list", icon: "users", label: "ประเมินพนักงาน", count: "mentortodo" },
+      { group: "ของฉัน", view: "me", icon: "id", label: "ข้อมูลของฉัน" },
+      { group: "ของฉัน", view: "schedule", icon: "clock", label: "ตารางเวลางาน" },
+      { group: "บัญชี", view: "pin", icon: "key", label: "เปลี่ยน PIN" }
+    ],
+    executive: [   // ผู้บริหาร: UC-17, UC-18 (ดูอย่างเดียว)
+      { group: "ภาพรวม", view: "home", icon: "home", label: "ภาพรวมการประเมิน" },
+      { group: "ภาพรวม", view: "notifications", icon: "bell", label: "แจ้งเตือน", count: "unread" },
+      { group: "รายงาน", view: "report", icon: "chart", label: "รายงานสรุปผล" },
       { group: "บัญชี", view: "me", icon: "id", label: "ข้อมูลของฉัน" },
       { group: "บัญชี", view: "pin", icon: "key", label: "เปลี่ยน PIN" }
     ],
@@ -54,9 +68,19 @@
     ]
   };
 
+  A.ROLE_TH = { evaluator: "HR (ฝ่ายบุคคล)", mentor: "พี่เลี้ยง", executive: "ผู้บริหาร", evaluatee: "พนักงาน" };
+  A.roleName = function (r) { return A.ROLE_TH[r] || "พนักงาน"; };
+  // หน้าที่บทบาทนี้เปิดได้ (ใช้ตอนกดแจ้งเตือน)
+  var EXTRA = { evaluator: ["calib", "selfview", "profile", "employees", "schedule"], mentor: ["form", "selfview"], executive: [], evaluatee: [] };
+  A.canView = function (v) {
+    var r = A.S.me && A.S.me.role;
+    return !!A.views[v] && ((A.NAV[r] || []).some(function (n) { return n.view === v; }) || (EXTRA[r] || []).indexOf(v) >= 0);
+  };
+
   // ชื่อหน้าบนแถบหัว
   A.TITLES = {
     home:  "หน้าหลัก",
+    overview: "ภาพรวมสถานะและผลการประเมิน",
     list:  "ประเมินพนักงาน",
     form:  "แบบประเมิน",
     table: "ติดตามสถานะการประเมิน",
@@ -89,10 +113,15 @@
     return Object.keys(S.evals).filter(function (k) { var e = S.evals[k]; return e && e.status === "submitted" && e.reply; }).length;
   }
 
-  // พนักงานที่ส่งประเมินตนเองแล้ว แต่หัวหน้ายังไม่ได้ส่งผล
+  // พนักงานที่ส่งประเมินตนเองแล้ว แต่พี่เลี้ยงยังไม่ได้ส่งผล
   function selfWait() {
     var S = A.S;
-    return Object.keys(S.selfs).filter(function (k) { var e = S.evals[k]; return S.selfs[k].status === "submitted" && !(e && e.status === "submitted"); }).length;
+    return A.staff().filter(function (k) { var e = S.evals[k], x = S.selfs[k]; return x && x.status === "submitted" && !(e && e.status === "submitted"); }).length;
+  }
+  // พี่เลี้ยง: ร่างที่ยังไม่ส่ง หรือ HR ส่งกลับ
+  function mentorTodo() {
+    var S = A.S;
+    return A.staff().filter(function (k) { var e = S.evals[k]; return (e && e.dbStatus === "draft") || (!e && A.selfDone(k)); }).length;
   }
   function selfTodo() { var S = A.S; return S.selfsLoaded && !A.selfDone(S.me.id) ? 1 : 0; }
 
@@ -102,17 +131,18 @@
 
   A.shell = function (content) {
     var S = A.S, esc = A.esc, me = S.me;
-    var active = S.view === "form" ? "list" : (S.view === "profile" && me.role === "evaluator") ? "employees" : S.view === "selfview" ? "selfs" : S.view === "calib" ? "reviews" : S.view;
+    var active = S.view === "form" ? "list" : (S.view === "profile" && me.role === "evaluator") ? "employees" : S.view === "selfview" ? (me.role === "evaluator" ? "table" : "selfs") : S.view === "calib" ? "reviews" : S.view;
     var lastGroup = "";
     var items = (A.NAV[me.role] || []).map(function (n) {
-      var c = n.count === "replies" ? replyCount() : n.count === "unread" ? A.unread() : n.count === "selfwait" ? selfWait() : n.count === "selftodo" ? selfTodo() : n.count === "goals" ? A.pendingGoals() : n.count === "reviews" ? A.reviewCount() : 0;
-      var tip = n.count === "replies" ? "ข้อสงสัยจากพนักงาน" : n.count === "unread" ? "ยังไม่อ่าน" : n.count === "selfwait" ? "ส่งประเมินตนเองแล้ว รอ HR ประเมิน" : n.count === "goals" ? "เป้าหมายรอตรวจสอบ" : n.count === "reviews" ? "รอตรวจสอบหรือรอเผยแพร่" : "ยังไม่ได้ส่งแบบประเมินตนเอง";
+      var c = n.count === "replies" ? replyCount() : n.count === "unread" ? A.unread() : n.count === "selfwait" ? selfWait() : n.count === "selftodo" ? selfTodo() : n.count === "goals" ? A.pendingGoals() : n.count === "reviews" ? A.reviewCount() : n.count === "mentortodo" ? mentorTodo() : 0;
+      var tip = n.count === "replies" ? "ข้อสงสัยจากพนักงาน" : n.count === "unread" ? "ยังไม่อ่าน" : n.count === "selfwait" ? "ส่งประเมินตนเองแล้ว รอพี่เลี้ยงประเมิน" : n.count === "goals" ? "เป้าหมายรอตรวจสอบ" : n.count === "reviews" ? "รอตรวจสอบหรือรอเผยแพร่" : n.count === "mentortodo" ? "รอประเมิน / ร่างที่ยังไม่ส่ง" : "ยังไม่ได้ส่งแบบประเมินตนเอง";
       var head = n.group && n.group !== lastGroup ? '<div class="nav-label">' + esc(n.group) + '</div>' : "";
       lastGroup = n.group || lastGroup;
       return head + '<button type="button" data-act="nav" data-view="' + n.view + '"' + (active === n.view ? ' class="on" aria-current="page"' : "") + '>' +
         ICON[n.icon] + '<span>' + esc(n.label) + '</span>' + (c ? '<span class="count" title="' + tip + '">' + (n.count === "selftodo" ? "!" : c) + '</span>' : "") + '</button>';
     }).join("");
-    var roleTh = me.role === "evaluator" ? "HR (ฝ่ายบุคคล)" : "พนักงาน";
+    var roleTh = A.roleName(me.role);
+    var title = S.view === "home" && me.role === "executive" ? "ภาพรวมการประเมิน" : S.view === "list" && me.role === "mentor" ? "พนักงานในความดูแล" : (A.TITLES[S.view] || "");
 
     return '<aside class="side" aria-label="เมนูหลัก">' +
         '<div class="side-brand"><div class="side-logo"><img src="img/logo.png" alt="" onerror="this.remove()">EV</div><div><b>ระบบประเมินพนักงาน</b><span>' + esc(A.PERIOD) + '</span></div></div>' +
@@ -124,11 +154,11 @@
       '<div class="scrim" data-act="menu"></div>' +
       '<div class="main">' +
         '<header class="head"><button type="button" class="menu-btn" data-act="menu" aria-label="เปิดเมนู">' + ICON.menu + '</button>' +
-          '<div class="grow"><div class="crumb">' + esc(A.PERIOD) + ' <span>/</span> ' + esc(A.TITLES[S.view] || "") + '</div><h1>' + esc(A.TITLES[S.view] || "") + '</h1></div>' +
+          '<div class="grow"><div class="crumb">' + esc(A.PERIOD) + ' <span>/</span> ' + esc(title) + '</div><h1>' + esc(title) + '</h1></div>' +
           '<span class="head-date">' + headDate() + '</span>' +
           '<button type="button" class="bell" data-act="nav" data-view="notifications" aria-label="แจ้งเตือน ' + A.unread() + ' รายการที่ยังไม่อ่าน">' + ICON.bell +
             (A.unread() ? '<span class="count">' + A.unread() + '</span>' : "") + '</button>' +
-          '<button type="button" class="chip" data-act="nav" data-view="' + (me.role === "evaluator" ? "me" : "profile") + '" title="ข้อมูลของฉัน"><span class="avatar xs">' + A.initial(me.name) + '</span><span><b>' + esc(me.name) + '</b><small>' + roleTh + '</small></span></button></header>' +
+          '<button type="button" class="chip" data-act="nav" data-view="' + (me.role === "evaluatee" ? "profile" : "me") + '" title="ข้อมูลของฉัน"><span class="avatar xs">' + A.initial(me.name) + '</span><span><b>' + esc(me.name) + '</b><small>' + roleTh + '</small></span></button></header>' +
         '<main class="content">' +
           (S.viewCycle && S.cycle ? '<div class="viewing"><span>กำลังดูข้อมูลย้อนหลังของ <b>' + esc(S.cycle.name) + '</b> (ปิดแล้ว ดูได้อย่างเดียว)</span><button type="button" class="btn sm" data-act="cyc-current">กลับไปรอบปัจจุบัน</button></div>' : "") +
           (S.flash && S.view !== "list" && S.view !== "mine" ? '<p class="flash" style="margin-bottom:16px">' + esc(S.flash) + '</p>' : "") + content + '</main>' +

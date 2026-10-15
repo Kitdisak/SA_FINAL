@@ -33,8 +33,8 @@
   }
 
   function evaluatorHome() {
-    var S = A.S, esc = A.esc;
-    var emps = Object.keys(S.accounts).filter(function (k) { return S.accounts[k].role === "evaluatee"; });
+    var S = A.S, esc = A.esc, isHR = S.me.role === "evaluator";
+    var emps = A.staff();
     var sub = emps.filter(function (k) { return S.evals[k] && S.evals[k].status === "submitted"; });
     var draft = emps.filter(function (k) { return S.evals[k] && S.evals[k].status !== "submitted"; });
     var todo = emps.filter(function (k) { return !S.evals[k]; });
@@ -42,7 +42,8 @@
     var asks = sub.filter(function (k) { return S.evals[k].reply; });
     var team = A.avg(sub.filter(function (k) { return A.isFinal(S.evals[k]); }).map(function (k) { return A.avg(S.evals[k].finalScores || []); }));
     // สถานะกระบวนการประเมิน (UC-18)
-    var flow = [["none", "list"], ["self", "selfs"], ["draft", "list"], ["pending_hr", "reviews"], ["confirmed", "reviews"], ["published", "table"], ["acknowledged", "table"]];
+    var flow = isHR ? [["none", "table"], ["self", "table"], ["draft", "table"], ["pending_hr", "reviews"], ["confirmed", "reviews"], ["published", "table"], ["acknowledged", "table"]]
+      : [["none", "selfs"], ["self", "selfs"], ["draft", "list"], ["pending_hr", "list"], ["confirmed", "list"], ["published", "list"], ["acknowledged", "list"]];
     var pipe = flow.map(function (f) {
       var n = emps.filter(function (k) { return A.stage(k) === f[0]; }).length;
       return '<button type="button" class="pipe-i' + (n ? "" : " zero") + '" data-act="nav" data-view="' + f[1] + '"><b class="num">' + n + '</b><span>' + A.STAGE[f[0]][0] + '</span></button>';
@@ -51,19 +52,23 @@
     var pct = emps.length ? Math.round(sub.length / emps.length * 100) : 0;
     var working = emps.filter(function (k) { var c = (S.schedules[k] || {})[A.todayNo()]; return c && c !== "OFF"; }).length;
 
-    function follow(list, label, cls) {
+    function follow(list, label, cls, act) {
       return list.map(function (k) {
         var a = S.accounts[k];
         return '<div class="fitem"><span class="avatar sm">' + A.initial(a.name) + '</span>' +
-          '<div class="grow"><b>' + esc(a.name) + '</b><span class="muted small">' + esc(a.position || "") + '</span></div>' +
+          '<div class="grow"><b>' + esc(a.name) + '</b><span class="muted small">' + esc(a.position || "") + (isHR ? " · พี่เลี้ยง " + esc(A.mentorName(k) || "ยังไม่มอบหมาย") : "") + '</span></div>' +
           '<span class="pill ' + cls + '">' + label + '</span>' +
-          '<button class="btn sm" data-act="open" data-id="' + esc(k) + '">เปิด</button></div>';
+          (act === "table" ? '<button class="btn sm" data-act="nav" data-view="table">เปิด</button>' : '<button class="btn sm" data-act="' + act + '" data-id="' + esc(k) + '">เปิด</button>') + '</div>';
       }).join("");
     }
-    var pending = asks.length + draft.length + todo.length, MAX = 6;
-    var rows = (follow(asks, "มีข้อสงสัย", "ask") + follow(draft, "ร่าง", "draft") + follow(todo, "ยังไม่ประเมิน", ""))
+    var hrWait = emps.filter(function (k) { var d = (S.evals[k] || {}).dbStatus; return d === "pending_hr" || d === "confirmed"; });
+    var noMentor = emps.filter(function (k) { return !(S.employees[k] || {}).mentor; });
+    var todoMine = todo.filter(function (k) { return A.canEvaluate(k); });
+    var pending = isHR ? asks.length + hrWait.length + noMentor.length : asks.length + draft.length + todoMine.length, MAX = 6;
+    var rows = (isHR ? follow(asks, "มีข้อสงสัย", "ask", "rv-open") + follow(hrWait, "รอ HR ดำเนินการ", "ask", "rv-open") + follow(noMentor, "ยังไม่มอบหมายพี่เลี้ยง", "late", "table")
+        : follow(asks, "มีข้อสงสัย", "ask", "open") + follow(draft, "ร่าง", "draft", "open") + follow(todoMine, "รอประเมิน", "", "open"))
       .split('<div class="fitem">').slice(1, MAX + 1).map(function (x) { return '<div class="fitem">' + x; }).join("") +
-      (pending > MAX ? '<button class="linkbtn" data-act="nav" data-view="list">ดูทั้งหมด ' + pending + ' รายการ →</button>' : "");
+      (pending > MAX ? '<button class="linkbtn" data-act="nav" data-view="' + (isHR ? "table" : "list") + '">ดูทั้งหมด ' + pending + ' รายการ →</button>' : "");
 
     // ความคืบหน้าตามแผนก
     var deps = {};
@@ -82,23 +87,26 @@
       '<section class="hero-banner">' +
         '<div class="hb-text"><span class="hb-date">' + I.sun + today() + '</span>' +
           '<h2>สวัสดี ' + esc(S.me.name) + '</h2>' +
-          '<p>' + (todo.length + draft.length ? 'ยังเหลือพนักงานที่ต้องประเมินอีก <b>' + (todo.length + draft.length) + ' คน</b> ในรอบนี้' : 'ประเมินครบทุกคนแล้ว เยี่ยมมาก!') + '</p>' +
-          '<div class="row"><button class="btn primary" data-act="nav" data-view="list">' + (todo.length + draft.length ? "ไปประเมินต่อ" : "ดูรายชื่อ") + '</button>' +
-          (rv ? '<button class="btn ghost" data-act="nav" data-view="reviews">ตรวจสอบและยืนยันผล (' + rv + ')</button>' : '<button class="btn ghost" data-act="nav" data-view="table">ติดตามสถานะ</button>') + '</div></div>' +
-        ring(pct, "ประเมินแล้ว") +
+          (isHR
+            ? '<p>' + (rv ? 'มีผลจากพี่เลี้ยงรอ HR ตรวจสอบ/เผยแพร่ <b>' + rv + ' คน</b>' : 'ยังไม่มีผลที่รอ HR ตรวจสอบ') + (noMentor.length ? ' · ยังไม่มอบหมายพี่เลี้ยง <b>' + noMentor.length + ' คน</b>' : "") + '</p>' +
+              '<div class="row"><button class="btn primary" data-act="nav" data-view="reviews">ตรวจสอบและยืนยันผล' + (rv ? " (" + rv + ")" : "") + '</button><button class="btn ghost" data-act="nav" data-view="table">ติดตามสถานะ</button></div></div>'
+            : '<p>' + (todo.length + draft.length ? 'พนักงานในความดูแล ' + emps.length + ' คน · ยังเหลือที่ต้องประเมินอีก <b>' + (todo.length + draft.length) + ' คน</b>' : emps.length ? 'ประเมินพนักงานในความดูแลครบทุกคนแล้ว เยี่ยมมาก!' : 'ยังไม่มีพนักงานที่ได้รับมอบหมาย') + '</p>' +
+              '<div class="row"><button class="btn primary" data-act="nav" data-view="list">' + (todo.length + draft.length ? "ไปประเมินต่อ" : "ดูรายชื่อ") + '</button>' +
+              (gp ? '<button class="btn ghost" data-act="nav" data-view="goalreview">ตรวจสอบเป้าหมาย (' + gp + ')</button>' : '<button class="btn ghost" data-act="nav" data-view="selfs">แบบประเมินตนเอง</button>') + '</div></div>') +
+        ring(pct, isHR ? "พี่เลี้ยงส่งผลแล้ว" : "ประเมินแล้ว") +
       '</section>' +
       '<div class="cards">' +
-        stat("users", "blue", "พนักงานทั้งหมด", '<span class="num">' + emps.length + '</span>', "คน") +
-        stat("check", "green", "ประเมินแล้ว", '<span class="num">' + sub.length + '</span>', "คน") +
+        stat("users", "blue", isHR ? "พนักงานทั้งหมด" : "พนักงานในความดูแล", '<span class="num">' + emps.length + '</span>', "คน") +
+        stat("check", "green", isHR ? "พี่เลี้ยงส่งผลแล้ว" : "ส่งผลให้ HR แล้ว", '<span class="num">' + sub.length + '</span>', "คน") +
         stat("edit", "amber", "ร่าง ยังไม่ส่ง", '<span class="num">' + draft.length + '</span>', "คน") +
         stat("flag", "slate", "ยังไม่ประเมิน", '<span class="num">' + todo.length + '</span>', "คน") +
       '</div>' +
-      '<section class="panel stack"><div class="sec-h"><h3>สถานะกระบวนการประเมิน</h3><span class="muted small">' + esc((S.cycle || {}).name || "") + (gp ? ' · <button class="linkbtn" data-act="nav" data-view="goalreview">เป้าหมายรอตรวจสอบ ' + gp + ' ข้อ →</button>' : "") +
-          (late ? ' · <button class="linkbtn late-link" data-act="late-go">ล่าช้า ' + late + ' คน →</button>' : "") + '</span></div>' +
+      '<section class="panel stack"><div class="sec-h"><h3>สถานะกระบวนการประเมิน</h3><span class="muted small">' + esc((S.cycle || {}).name || "") + (gp && !isHR ? ' · <button class="linkbtn" data-act="nav" data-view="goalreview">เป้าหมายรอตรวจสอบ ' + gp + ' ข้อ →</button>' : "") +
+          (late && isHR ? ' · <button class="linkbtn late-link" data-act="late-go">ล่าช้า ' + late + ' คน →</button>' : late ? ' · <span class="pill late">ล่าช้า ' + late + ' คน</span>' : "") + '</span></div>' +
         '<div class="pipe">' + pipe + '</div></section>' +
       '<div class="dash">' +
         '<section class="panel stack"><div class="sec-h"><h3>รายการที่ต้องติดตาม</h3><span class="pill">' + (asks.length + draft.length + todo.length) + ' รายการ</span></div>' +
-          '<div class="flist">' + (rows || '<div class="empty">ไม่มีรายการค้าง ประเมินครบทุกคนแล้ว</div>') + '</div></section>' +
+          '<div class="flist">' + (rows || '<div class="empty">ไม่มีรายการค้าง</div>') + '</div></section>' +
         '<div class="stack">' +
           '<section class="panel stack"><h3>ภาพรวมทีม</h3><div class="mini">' +
             '<div><span class="mini-ic t-blue">' + I.star + '</span><b class="num">' + (team ? team.toFixed(2) : "–") + '</b><span class="muted small">คะแนนสุดท้ายเฉลี่ย</span></div>' +
@@ -120,13 +128,13 @@
     var sx = A.selfOf(S.me.id), sst = sx ? sx.status : "none";
     var gl = S.goals || [], gap = gl.filter(function (g) { return g.status === "approved"; }).length, gret = gl.filter(function (g) { return g.status === "returned"; }).length;
     var goalBox = '<section class="panel self-cta' + (gl.length && gap === gl.length ? " ok" : "") + '"><div><b>เป้าหมายของฉัน</b><p class="muted small">' +
-      (!gl.length ? "ยังไม่ได้กำหนดเป้าหมายในรอบนี้" : gret ? "มี " + gret + " ข้อที่ HR ส่งกลับให้แก้ไข" : "อนุมัติแล้ว " + gap + "/" + gl.length + " ข้อ") + '</p></div>' +
+      (!gl.length ? "ยังไม่ได้กำหนดเป้าหมายในรอบนี้" : gret ? "มี " + gret + " ข้อที่พี่เลี้ยงส่งกลับให้แก้ไข" : "อนุมัติแล้ว " + gap + "/" + gl.length + " ข้อ") + '</p></div>' +
       '<button class="btn' + (gl.length ? "" : " primary") + '" data-act="nav" data-view="goals">' + (gl.length ? "ดูเป้าหมาย" : "กำหนดเป้าหมาย") + '</button></section>';
     var selfBox = !S.selfsLoaded ? "" : '<section class="panel self-cta' + (sst === "submitted" ? " ok" : "") + '"><div>' +
       '<b>แบบประเมินตนเอง</b><p class="muted small">' +
-      (sst === "submitted" ? "ส่งให้ HR แล้วเมื่อ " + A.fdate(sx.submittedAt) + " · คะแนนเฉลี่ย " + A.avg(sx.scores).toFixed(2)
-        : sx && sx.returnReason ? "HR ส่งกลับให้แก้ไข: " + esc(sx.returnReason)
-        : sst === "draft" ? "บันทึกร่างไว้แล้ว ยังไม่ได้ส่งให้ HR" : "ประเมินตนเอง 20 ข้อ แล้วส่งให้ HR ก่อน HR ประเมิน") + '</p></div>' +
+      (sst === "submitted" ? "ส่งให้พี่เลี้ยงแล้วเมื่อ " + A.fdate(sx.submittedAt) + " · คะแนนเฉลี่ย " + A.avg(sx.scores).toFixed(2)
+        : sx && sx.returnReason ? "พี่เลี้ยงส่งกลับให้แก้ไข: " + esc(sx.returnReason)
+        : sst === "draft" ? "บันทึกร่างไว้แล้ว ยังไม่ได้ส่งให้พี่เลี้ยง" : "ประเมินตนเอง 20 ข้อ แล้วส่งให้พี่เลี้ยงก่อนพี่เลี้ยงประเมิน") + '</p></div>' +
       '<button class="btn' + (sst === "submitted" ? "" : " primary") + '" data-act="nav" data-view="self">' + (sst === "submitted" ? "ดูแบบประเมินตนเอง" : sst === "none" ? "เริ่มประเมินตนเอง" : "ทำต่อ") + '</button></section>';
 
     var evalBox = done
@@ -141,7 +149,7 @@
       '<section class="hero-banner">' +
         '<div class="hb-text"><span class="hb-date">' + I.sun + today() + '</span>' +
           '<h2>สวัสดี ' + esc(S.me.name) + '</h2>' +
-          '<p>' + esc(acc.position || "") + (emp.department ? " · " + esc(emp.department) : "") + '</p>' +
+          '<p>' + esc(acc.position || "") + (emp.department ? " · " + esc(emp.department) : "") + (emp.mentor ? " · พี่เลี้ยง: " + esc(A.mentorName(S.me.id)) : "") + '</p>' +
           '<div class="row">' + (done ? '<button class="btn primary" data-act="nav" data-view="mine">ดูผลประเมินของฉัน</button>' : "") +
           '<button class="btn ghost" data-act="nav" data-view="profile">ข้อมูลของฉัน</button></div></div>' +
         '<div class="hb-shift"><span>วันนี้</span><b>' + (shift ? shift.label : "–") + '</b><small>' + (shift && shift.time ? shift.time : "") + '</small></div>' +
@@ -152,6 +160,7 @@
   }
 
   A.views.home = function () {
-    return A.S.me && A.S.me.role === "evaluator" ? evaluatorHome() : evaluateeHome();
+    var r = A.S.me && A.S.me.role;
+    return r === "executive" ? A.views.overview() : r === "evaluator" || r === "mentor" ? evaluatorHome() : evaluateeHome();
   };
 })(window.App);
