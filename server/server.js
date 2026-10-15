@@ -15,21 +15,26 @@ app.use(express.static(path.join(__dirname, '..')));
 
 /* =====================================================================
    ฐานข้อมูล 13 ตารางตามเอกสาร (sql/03_document_schema.sql)
-   บทบาท 2 แบบ: hr (หน้าเว็บเรียกว่า evaluator) และ employee (evaluatee)
-   HR ทำ UC-07 ถึง UC-18 ทั้งหมด, พนักงานทำ UC-01 ถึง UC-06
-   ขั้นตอน: not_started -> (พนักงานส่งประเมินตนเอง) pending_mentor -> (HR ประเมิน) draft -> pending_hr
+   บทบาท 4 แบบตาม Use Case
+     employee  (หน้าเว็บ: evaluatee)  พนักงาน   UC-01 ถึง UC-06
+     mentor    (หน้าเว็บ: mentor)     พี่เลี้ยง   UC-07 ถึง UC-11 (เฉพาะพนักงานที่ได้รับมอบหมาย evaluations.mentor_id)
+     hr        (หน้าเว็บ: evaluator)  HR        UC-12 ถึง UC-16 + มอบหมายพี่เลี้ยง ขยายเวลา ตารางงาน ประวัติการเปลี่ยนแปลง
+     executive (หน้าเว็บ: executive)  ผู้บริหาร   UC-17, UC-18 (ดูอย่างเดียว เห็นคะแนนเฉพาะผลที่ยืนยันแล้ว)
+   ขั้นตอน: not_started -> (พนักงานส่งประเมินตนเอง) pending_mentor -> (พี่เลี้ยงประเมิน) draft -> (พี่เลี้ยงส่ง) pending_hr
             -> (HR ปรับเทียบ/ยืนยัน) confirmed -> (เผยแพร่) published -> (พนักงานรับทราบ) acknowledged
+            พี่เลี้ยงส่งแบบประเมินตนเองกลับ = returned (UC-10), HR ส่งผลกลับให้พี่เลี้ยงแก้ = draft (UC-15)
    ===================================================================== */
 let pool;
 const OBJ = { outFormat: oracledb.OUT_FORMAT_OBJECT };
-const ROLE_OUT = { hr: 'evaluator', employee: 'evaluatee' };       // ค่าใน DB -> ค่าที่หน้าเว็บใช้
+const ROLE_OUT = { hr: 'evaluator', employee: 'evaluatee', mentor: 'mentor', executive: 'executive' };   // ค่าใน DB -> ค่าที่หน้าเว็บใช้
 const VIEW_TO_TYPE = {
   mine: 'result', table: 'review', schedule: 'schedule', home: 'account', employees: 'staff',
-  selfs: 'self_eval', self: 'self_return', goals: 'goal', goalreview: 'goal_review', cycle: 'cycle', reviews: 'calibrate'
+  selfs: 'self_eval', self: 'self_return', goals: 'goal', goalreview: 'goal_review', cycle: 'cycle', reviews: 'calibrate',
+  list: 'evaluate', overview: 'overview', report: 'report'
 };
 const TYPE_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_TYPE).map(([v, t]) => [t, v]));
 const SHIFT_CODES = ['M', 'A', 'N', 'OFF'];
-const EVALUATED = ['pending_hr', 'confirmed', 'published', 'acknowledged'];   // HR ส่งผลประเมินแล้ว
+const EVALUATED = ['pending_hr', 'confirmed', 'published', 'acknowledged'];   // พี่เลี้ยงส่งผลประเมินแล้ว
 const PUBLIC = ['published', 'acknowledged'];                                  // พนักงานเห็นผลได้
 const LOCKED = ['confirmed', 'published', 'acknowledged'];                     // ยืนยันแล้ว แก้คะแนนไม่ได้
 
@@ -107,6 +112,19 @@ async function notifyHR(title, body, view, except) {
     for (const b of r.rows) if (b.USERNAME !== except) await notify(b.USERNAME, title, body, view);
   } catch (e) { console.error('notifyHR failed:', e.message); }
 }
+// พี่เลี้ยงของพนักงานในรอบที่เปิดอยู่ (evaluations.mentor_id)
+async function mentorOf(empUsername) {
+  const r = await query(`SELECT m.username FROM evaluations e JOIN users u ON u.user_id = e.employee_id JOIN users m ON m.user_id = e.mentor_id
+                           JOIN evaluation_cycles c ON c.cycle_id = e.cycle_id WHERE u.username = :u AND c.status = 'open'`, { u: empUsername });
+  return r.rows.length ? r.rows[0].USERNAME : null;
+}
+async function notifyMentor(empUsername, title, body, view) {
+  try {
+    const m = await mentorOf(empUsername);
+    if (m) await notify(m, title, body, view);
+    else await notifyHR(title + ' (ยังไม่ได้มอบหมายพี่เลี้ยง)', body, 'table');
+  } catch (e) { console.error('notifyMentor failed:', e.message); }
+}
 function publicUser(row) {
   return { id: row.USERNAME, name: row.FULL_NAME, role: ROLE_OUT[row.ROLE] || row.ROLE, position: row.POSITION_NAME };
 }
@@ -170,11 +188,15 @@ async function scoreMap(cycleId, role) {
 }
 
 // อ่านผลการประเมินในรอบปัจจุบัน แล้วแปลงเป็นรูปแบบที่หน้าเว็บใช้
-// forEmployee = true: เห็นเฉพาะผลที่เผยแพร่แล้ว และคะแนนเป็นคะแนนสุดท้ายหลังปรับเทียบ
-async function loadEvaluations(username, forEmployee, wantCycle) {
+// mode = 'employee': เห็นเฉพาะผลที่เผยแพร่แล้ว และคะแนนเป็นคะแนนสุดท้ายหลังปรับเทียบ
+//        'mentor'  : เฉพาะพนักงานที่ตนเป็นพี่เลี้ยง (uid)
+//        'exec'    : ผู้บริหารเห็นสถานะทุกคน แต่เห็นคะแนนเฉพาะผลที่ HR ยืนยันแล้ว (UC-17, UC-18)
+//        'hr'      : ทุกคน
+async function loadEvaluations(username, mode, wantCycle, uid) {
+  const forEmployee = mode === 'employee';
   const { cycleId } = await currentCycle(query, wantCycle);
   const r = await query(
-    `SELECT e.evaluation_id, emp.username AS emp_u, m.username AS men_u, m.full_name AS men_n, e.status,
+    `SELECT e.evaluation_id, e.mentor_id, emp.username AS emp_u, m.username AS men_u, m.full_name AS men_n, e.status,
             e.strengths, e.improvements, e.category_comments, e.employee_reply, e.replied_at,
             e.updated_at, e.mentor_submitted_at, r.final_score, r.summary, r.confirmed_at, r.published_at, r.acknowledged_at
        FROM evaluations e
@@ -185,9 +207,16 @@ async function loadEvaluations(username, forEmployee, wantCycle) {
     ' ORDER BY emp.username', username ? { c: cycleId, u: username } : { c: cycleId });
   if (!r.rows.length) return [];
   const mentor = await scoreMap(cycleId, 'mentor'), hr = await scoreMap(cycleId, 'hr');
+  // เหตุผลที่ HR ส่งผลกลับให้พี่เลี้ยงแก้ไข (UC-15) ล่าสุดของแต่ละรายการ
+  const back = {};
+  if (mode === 'mentor' || mode === 'hr') {
+    const rb = await query("SELECT entity_id, change_detail FROM audit_logs WHERE entity_type = 'evaluations' AND action = 'RETURN_TO_MENTOR' ORDER BY log_id");
+    for (const x of rb.rows) { try { back[x.ENTITY_ID] = JSON.parse(x.CHANGE_DETAIL || '{}').reason || ''; } catch (_) {} }
+  }
   const out = [];
   for (const row of r.rows) {
     if (forEmployee && !PUBLIC.includes(row.STATUS)) continue;
+    if (mode === 'mentor' && row.MENTOR_ID !== uid) continue;
     let cc = [];
     try { cc = JSON.parse(row.CATEGORY_COMMENTS || '[]'); } catch (_) {}
     const ms0 = mentor[row.EVALUATION_ID] || new Array(20).fill(0);
@@ -206,19 +235,28 @@ async function loadEvaluations(username, forEmployee, wantCycle) {
       reply: row.EMPLOYEE_REPLY || '', replyAt: ms(row.REPLIED_AT)
     };
     if (!forEmployee) { o.hrScores = hs || new Array(20).fill(0); o.finalScores = fin; }
+    if (row.STATUS === 'draft' && back[row.EVALUATION_ID]) o.hrReturn = back[row.EVALUATION_ID];
+    if (mode === 'exec') {   // ผู้บริหาร: ไม่เห็นคะแนน/ความเห็นระหว่างดำเนินการ
+      const locked = LOCKED.includes(row.STATUS);
+      const z = new Array(20).fill(0);
+      Object.assign(o, { scores: locked ? fin : z, hrScores: locked ? fin : z, finalScores: locked ? fin : z, cc: [], strengths: '', improvements: '', reply: '',
+        summary: locked ? o.summary : '', final: locked ? o.final : null });
+    }
     out.push(o);
   }
   return out;
 }
 
 // อ่านแบบประเมินตนเอง (UC-03, UC-04): คะแนน evaluator_role = 'employee' + self_comment / self_category_comments
-async function loadSelf(username, wantCycle) {
+async function loadSelf(username, wantCycle, mentorUid) {
   const { cycleId } = await currentCycle(query, wantCycle);
+  const b = { c: cycleId };
+  if (username) b.u = username;
+  if (mentorUid) b.m = mentorUid;
   const r = await query(
     `SELECT e.evaluation_id, u.username, e.self_submitted_at, e.self_comment, e.self_category_comments, e.updated_at
        FROM evaluations e JOIN users u ON u.user_id = e.employee_id
-      WHERE e.cycle_id = :c AND u.role = 'employee'` + (username ? ' AND u.username = :u' : '') + ' ORDER BY u.username',
-    username ? { c: cycleId, u: username } : { c: cycleId });
+      WHERE e.cycle_id = :c AND u.role = 'employee'` + (username ? ' AND u.username = :u' : '') + (mentorUid ? ' AND e.mentor_id = :m' : '') + ' ORDER BY u.username', b);
   if (!r.rows.length) return [];
   const scores = await scoreMap(cycleId, 'employee');
   const rr = await query(
@@ -262,9 +300,24 @@ function requireEmployee(req, res, next) {
   if (req.user.role !== 'evaluatee') return res.status(403).json({ error: 'เฉพาะพนักงานเท่านั้น' });
   next();
 }
+function requireMentor(req, res, next) {
+  if (req.user.role !== 'mentor') return res.status(403).json({ error: 'เฉพาะพี่เลี้ยงเท่านั้น' });
+  next();
+}
+// ผู้ที่ดูข้อมูลภาพรวมได้: HR, พี่เลี้ยง (เฉพาะทีม), ผู้บริหาร
+function requireStaffViewer(req, res, next) {
+  if (!['evaluator', 'mentor', 'executive'].includes(req.user.role)) return res.status(403).json({ error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลนี้' });
+  next();
+}
+const viewMode = req => ({ evaluator: 'hr', mentor: 'mentor', executive: 'exec', evaluatee: 'employee' }[req.user.role]);
+// UC-07/08/10 Exception 2: พี่เลี้ยงทำได้เฉพาะพนักงานที่ได้รับมอบหมาย
+function requireOwnStaff(ev, req) {
+  if (!ev) throw fail(404, 'ไม่พบรายการประเมินของพนักงานในรอบนี้');
+  if (ev.MENTOR_ID !== req.uid) throw fail(403, 'คุณไม่ได้เป็นพี่เลี้ยงของพนักงานคนนี้');
+}
 // หาแถว evaluations ของพนักงานในรอบปัจจุบัน
 async function evalOf(ex, cycleId, username) {
-  const r = await ex(`SELECT e.evaluation_id, e.status, e.self_submitted_at, u.user_id, u.username, u.full_name
+  const r = await ex(`SELECT e.evaluation_id, e.status, e.self_submitted_at, e.mentor_id, u.user_id, u.username, u.full_name
                         FROM evaluations e JOIN users u ON u.user_id = e.employee_id
                        WHERE e.cycle_id = :c AND u.username = :u`, { c: cycleId, u: username });
   return r.rows[0] || null;
@@ -289,7 +342,7 @@ app.get('/api/health', async (_req, res, next) => {
 });
 app.get('/api/accounts', async (_req, res, next) => {
   try {
-    const r = await query("SELECT username, full_name, role, position_name FROM users WHERE status = 'active' AND role IN ('hr', 'employee') ORDER BY username");
+    const r = await query("SELECT username, full_name, role, position_name FROM users WHERE status = 'active' ORDER BY username");
     res.json(r.rows.map(publicUser));
   } catch (e) { next(e); }
 });
@@ -299,7 +352,7 @@ app.post('/api/login', async (req, res, next) => {
     const pin = String(req.body.pin || '');
     const bad = () => res.status(401).json({ error: 'ชื่อผู้ใช้หรือ PIN ไม่ถูกต้อง' });
     if (!/^[a-z0-9_-]{3,50}$/.test(username) || !/^\d{4,12}$/.test(pin)) return bad();
-    const r = await query("SELECT user_id, username, full_name, role, position_name, password_hash FROM users WHERE username = :u AND status = 'active' AND role IN ('hr', 'employee')", { u: username });
+    const r = await query("SELECT user_id, username, full_name, role, position_name, password_hash FROM users WHERE username = :u AND status = 'active'", { u: username });
     if (!r.rows.length) return bad();
     const row = r.rows[0];
     const actual = Buffer.from(pinHash(username, pin), 'hex');
@@ -332,7 +385,7 @@ app.get('/api/cycle', requireAuth, async (req, res, next) => {
     const c = (await cycleRows('WHERE cycle_id = :c', { c: cycleId }))[0] || null;
     if (c) {
       c.today = todayTxt();
-      const own = req.user.role !== 'evaluator';
+      const own = req.user.role === 'evaluatee';
       const x = await query(`SELECT x.ext_id, u.username, x.stage_key, TO_CHAR(x.until_date, 'YYYY-MM-DD') AS u_txt, x.reason
                                FROM deadline_extensions x JOIN users u ON u.user_id = x.employee_id
                               WHERE x.cycle_id = :c` + (own ? ' AND x.employee_id = :e' : '') + ' ORDER BY u.username, x.stage_key', own ? { c: cycleId, e: req.uid } : { c: cycleId });
@@ -485,13 +538,21 @@ app.post('/api/cycles/:id/open', requireAuth, requireHR, async (req, res, next) 
       const emps = await ex("SELECT user_id FROM users WHERE role = 'employee' AND status = 'active'");
       for (const u of emps.rows) {
         const has = await ex('SELECT 1 AS x FROM evaluations WHERE cycle_id = :c AND employee_id = :e', { c: id, e: u.USER_ID });
-        if (!has.rows.length) await ex("INSERT INTO evaluations (cycle_id, employee_id, form_id, status) VALUES (:c, :e, :f, 'not_started')", { c: id, e: u.USER_ID, f: f.rows[0].FORM_ID });
+        if (has.rows.length) continue;
+        // พี่เลี้ยงเดิมจากรอบก่อนหน้า (HR เปลี่ยนได้ที่หน้าติดตามสถานะ)
+        const pm = await ex(`SELECT e.mentor_id FROM evaluations e JOIN users m ON m.user_id = e.mentor_id
+                              WHERE e.employee_id = :e AND e.cycle_id <> :c AND m.role = 'mentor' AND m.status = 'active'
+                              ORDER BY e.evaluation_id DESC FETCH FIRST 1 ROWS ONLY`, { e: u.USER_ID, c: id });
+        await ex("INSERT INTO evaluations (cycle_id, employee_id, form_id, status, mentor_id) VALUES (:c, :e, :f, 'not_started', :m)",
+          { c: id, e: u.USER_ID, f: f.rows[0].FORM_ID, m: pm.rows.length ? pm.rows[0].MENTOR_ID : null });
       }
       await audit(ex, req.uid, 'evaluation_cycles', id, 'OPEN_CYCLE', { employees: emps.rows.length });
       return c.rows[0].CYCLE_NAME;
     });
     const emps = await query("SELECT username FROM users WHERE role = 'employee' AND status = 'active'");
     for (const u of emps.rows) await notify(u.USERNAME, 'เปิด' + name + ' แล้ว', 'ดูช่วงเวลาแต่ละขั้นตอน และเริ่มกำหนดเป้าหมาย/ประเมินตนเองได้', 'cycle');
+    const ms = await query("SELECT username FROM users WHERE role = 'mentor' AND status = 'active'");
+    for (const u of ms.rows) await notify(u.USERNAME, 'เปิด' + name + ' แล้ว', 'ดูรายชื่อพนักงานที่ได้รับมอบหมายได้ที่หน้า "ประเมินพนักงาน"', 'list');
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -560,9 +621,11 @@ app.put('/api/form', requireAuth, requireHR, async (req, res, next) => {
 app.get('/api/goals', requireAuth, async (req, res, next) => {
   try {
     const { cycleId } = await currentCycle(query, cycleParam(req));
-    const own = req.user.role !== 'evaluator';
+    const role = req.user.role, own = role === 'evaluatee', men = role === 'mentor';
     const r = await query(`SELECT g.goal_id, u.username, g.title, g.detail, g.status, g.review_comment FROM goals g JOIN users u ON u.user_id = g.employee_id
-                            WHERE g.cycle_id = :c` + (own ? ' AND g.employee_id = :e' : " AND g.status <> 'draft'") + ' ORDER BY u.username, g.goal_id', own ? { c: cycleId, e: req.uid } : { c: cycleId });
+                            WHERE g.cycle_id = :c` + (own ? ' AND g.employee_id = :e' : " AND g.status <> 'draft'") +
+                          (men ? ' AND g.employee_id IN (SELECT employee_id FROM evaluations WHERE cycle_id = :c AND mentor_id = :e)' : '') +
+                          ' ORDER BY u.username, g.goal_id', own || men ? { c: cycleId, e: req.uid } : { c: cycleId });
     res.json(r.rows.map(g => ({ id: g.GOAL_ID, userId: g.USERNAME, title: g.TITLE, detail: g.DETAIL || '', status: g.STATUS, comment: g.REVIEW_COMMENT || '' })));
   } catch (e) { next(e); }
 });
@@ -636,11 +699,11 @@ app.post('/api/goals/submit', requireAuth, requireEmployee, async (req, res, nex
       await audit(ex, req.uid, 'goals', req.uid, 'SUBMIT_GOALS', { count: r.rowsAffected });
       return r.rowsAffected;
     });
-    await notifyHR(req.user.name + ' ส่งเป้าหมายให้ตรวจสอบ', n + ' ข้อ รอการตรวจสอบ', 'goalreview');
+    await notifyMentor(req.user.id, req.user.name + ' ส่งเป้าหมายให้ตรวจสอบ', n + ' ข้อ รอการตรวจสอบ', 'goalreview');
     res.json({ ok: true, count: n });
   } catch (e) { next(e); }
 });
-app.post('/api/goals/:id/review', requireAuth, requireHR, async (req, res, next) => {
+app.post('/api/goals/:id/review', requireAuth, requireMentor, async (req, res, next) => {
   try {
     const id = Number(req.params.id), b = req.body || {};
     const decision = b.decision === 'approve' ? 'approved' : b.decision === 'return' ? 'returned' : null;
@@ -648,34 +711,36 @@ app.post('/api/goals/:id/review', requireAuth, requireHR, async (req, res, next)
     if (!decision) return res.status(400).json({ error: 'ต้องเลือกอนุมัติหรือส่งกลับ' });
     if (decision === 'returned' && !comment) return res.status(400).json({ error: 'กรุณาระบุเหตุผลที่ส่งกลับ' });
     const who = await tx(async ex => {
-      await openCycle(ex);
-      const r = await ex('SELECT g.status, g.title, u.username FROM goals g JOIN users u ON u.user_id = g.employee_id WHERE g.goal_id = :g', { g: id });
+      const { cycleId } = await openCycle(ex);
+      const r = await ex('SELECT g.status, g.title, g.cycle_id, u.username FROM goals g JOIN users u ON u.user_id = g.employee_id WHERE g.goal_id = :g', { g: id });
       if (!r.rows.length) throw fail(404, 'ไม่พบเป้าหมาย');
+      if (r.rows[0].CYCLE_ID !== cycleId) throw fail(409, 'เป้าหมายนี้อยู่ในรอบที่ปิดแล้ว');
+      requireOwnStaff(await evalOf(ex, cycleId, r.rows[0].USERNAME), req);
       if (r.rows[0].STATUS !== 'pending_review') throw fail(409, 'เป้าหมายนี้ไม่ได้อยู่ในสถานะรอตรวจสอบ');
       await ex('UPDATE goals SET status = :s, review_comment = :c WHERE goal_id = :g', { s: decision, c: { val: comment, type: oracledb.CLOB }, g: id });
       await audit(ex, req.uid, 'goals', id, decision === 'approved' ? 'APPROVE_GOAL' : 'RETURN_GOAL', { comment: comment.slice(0, 200) });
       return r.rows[0];
     });
-    await notify(who.USERNAME, decision === 'approved' ? 'เป้าหมาย "' + who.TITLE + '" ได้รับการอนุมัติ' : 'เป้าหมาย "' + who.TITLE + '" ถูกส่งกลับให้แก้ไข', comment, 'goals');
+    await notify(who.USERNAME, decision === 'approved' ? 'พี่เลี้ยงอนุมัติเป้าหมาย "' + who.TITLE + '"' : 'พี่เลี้ยงส่งเป้าหมาย "' + who.TITLE + '" กลับให้แก้ไข', comment, 'goals');
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
 /* ---------- ผลการประเมิน (UC-05, 06, 08, 09, 11, 14) ---------- */
-app.get('/api/evaluations', requireAuth, requireHR, async (req, res, next) => {
-  try { res.json(await loadEvaluations(null, false, cycleParam(req))); } catch (e) { next(e); }
+app.get('/api/evaluations', requireAuth, requireStaffViewer, async (req, res, next) => {
+  try { res.json(await loadEvaluations(null, viewMode(req), cycleParam(req), req.uid)); } catch (e) { next(e); }
 });
 app.get('/api/evaluations/:id', requireAuth, async (req, res, next) => {
   try {
     const id = String(req.params.id).toLowerCase();
-    const hr = req.user.role === 'evaluator';
-    if (!hr && req.user.id !== id) return res.status(403).json({ error: 'ไม่มีสิทธิ์ดูผลประเมินของผู้อื่น' });
-    const list = await loadEvaluations(id, !hr, cycleParam(req));
+    const mode = viewMode(req);
+    if (mode === 'employee' && req.user.id !== id) return res.status(403).json({ error: 'ไม่มีสิทธิ์ดูผลประเมินของผู้อื่น' });
+    const list = await loadEvaluations(id, mode, cycleParam(req), req.uid);
     res.json({ data: list[0] || null });
   } catch (e) { next(e); }
 });
-// HR บันทึกร่าง / ส่งผลประเมิน -> สถานะ pending_hr รอตรวจสอบและปรับเทียบ
-app.put('/api/evaluations/:id', requireAuth, requireHR, async (req, res, next) => {
+// พี่เลี้ยงบันทึกร่าง (UC-08, UC-09) / ส่งผลประเมิน (UC-11) -> สถานะ pending_hr รอ HR ตรวจสอบและปรับเทียบ
+app.put('/api/evaluations/:id', requireAuth, requireMentor, async (req, res, next) => {
   try {
     const id = String(req.params.id).toLowerCase();
     const data = req.body || {};
@@ -690,15 +755,12 @@ app.put('/api/evaluations/:id', requireAuth, requireHR, async (req, res, next) =
       checkScores(scores, submit, settings.max);
       const emp = await ex("SELECT user_id FROM users WHERE username = :u AND role = 'employee' AND status = 'active'", { u: id });
       if (!emp.rows.length) throw fail(400, 'ไม่พบพนักงานที่ต้องการประเมิน');
-      let ev = await evalOf(ex, cycleId, id), evalId, before = 'not_started';
-      if (ev) {
-        evalId = ev.EVALUATION_ID; before = ev.STATUS;
-        if (LOCKED.includes(before)) throw fail(409, 'ผลประเมินนี้ยืนยันแล้ว แก้ไขไม่ได้ (ยกเลิกการยืนยันก่อน)');
-      } else {
-        const ins = await ex(`INSERT INTO evaluations (cycle_id, employee_id, form_id, status) VALUES (:c, :e, :f, 'not_started')
-                              RETURNING evaluation_id INTO :rid`, { c: cycleId, e: emp.rows[0].USER_ID, f: formId, rid: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
-        evalId = ins.outBinds.rid[0];
-      }
+      const ev = await evalOf(ex, cycleId, id);
+      requireOwnStaff(ev, req);
+      const evalId = ev.EVALUATION_ID, before = ev.STATUS;
+      if (LOCKED.includes(before)) throw fail(409, 'ผลประเมินนี้ HR ยืนยันแล้ว แก้ไขไม่ได้');
+      // UC-11 Exception 3: ส่งแล้วแก้ไม่ได้ จนกว่า HR จะส่งกลับ
+      if (before === 'pending_hr') throw fail(409, 'ส่งผลประเมินให้ HR แล้ว แก้ไขไม่ได้ (ถ้าต้องแก้ ให้ HR ส่งกลับ)');
       // UC-08 Exception 1: ต้องรอพนักงานส่งแบบประเมินตนเองก่อน (เว้นแต่พ้นกำหนดส่งแล้ว)
       if (!(ev && ev.SELF_SUBMITTED_AT)) {
         const w = await stageWindow(ex, cycleId, 'self', emp.rows[0].USER_ID);
@@ -711,19 +773,20 @@ app.put('/api/evaluations/:id', requireAuth, requireHR, async (req, res, next) =
         if (rq.catComment && cc.filter(x => x.trim()).length < 5) throw fail(400, 'กรุณากรอกความเห็นให้ครบทุกหมวดก่อนส่ง');
       }
       const status = submit ? 'pending_hr' : 'draft';
-      await ex(`UPDATE evaluations SET mentor_id = :m, form_id = :f, status = :s, strengths = :st, improvements = :im,
+      await ex(`UPDATE evaluations SET form_id = :f, status = :s, strengths = :st, improvements = :im,
                        category_comments = :cc, updated_at = SYSTIMESTAMP,
                        mentor_submitted_at = CASE WHEN :sub = 1 THEN SYSTIMESTAMP ELSE NULL END
                  WHERE evaluation_id = :id`,
-        { m: req.uid, f: formId, s: status, st: { val: strengths, type: oracledb.CLOB }, im: { val: improvements, type: oracledb.CLOB },
+        { f: formId, s: status, st: { val: strengths, type: oracledb.CLOB }, im: { val: improvements, type: oracledb.CLOB },
           cc: { val: JSON.stringify(cc), type: oracledb.CLOB }, sub: submit ? 1 : 0, id: evalId });
       await saveScores(ex, evalId, 'mentor', criteria, scores);
       // คะแนนประเมินเปลี่ยน -> ล้างผลปรับเทียบเดิม ต้องตรวจสอบใหม่
       await ex("DELETE FROM evaluation_scores WHERE evaluation_id = :id AND evaluator_role = 'hr'", { id: evalId });
       await ex('DELETE FROM evaluation_results WHERE evaluation_id = :id', { id: evalId });
       await audit(ex, req.uid, 'evaluations', evalId, submit ? 'SUBMIT' : 'SAVE_DRAFT', { employee: id, before, after: status, answered: scores.filter(x => x > 0).length, average: avg });
-      return { evalId };
+      return { evalId, name: ev.FULL_NAME };
     });
+    if (submit) await notifyHR(req.user.name + ' (พี่เลี้ยง) ส่งผลประเมินของ ' + result.name, 'คะแนนเฉลี่ย ' + (avg == null ? '-' : avg.toFixed(2)) + ' รอตรวจสอบและปรับเทียบ', 'reviews');
     res.json({ ok: true, evaluationId: result.evalId });
   } catch (e) { next(e); }
 });
@@ -752,29 +815,30 @@ app.patch('/api/evaluations/:id', requireAuth, requireEmployee, async (req, res,
         await audit(ex, req.uid, 'evaluations', ev.EVALUATION_ID, 'REPLY', { reply: reply.slice(0, 200) });
       }
     });
-    if (hasAck) await notifyHR(req.user.name + ' รับทราบผลประเมินแล้ว', '', 'table');
-    if (hasReply) await notifyHR(req.user.name + ' ส่งข้อสงสัยถึง HR', reply.slice(0, 200), 'table');
+    if (hasAck) { await notifyHR(req.user.name + ' รับทราบผลประเมินแล้ว', '', 'table'); await notifyMentor(id, req.user.name + ' รับทราบผลประเมินแล้ว', '', 'list'); }
+    if (hasReply) { await notifyHR(req.user.name + ' ส่งข้อสงสัยเกี่ยวกับผลประเมิน', reply.slice(0, 200), 'table'); await notifyMentor(id, req.user.name + ' ส่งข้อสงสัยเกี่ยวกับผลประเมิน', reply.slice(0, 200), 'list'); }
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
-// ลบผลประเมินของ HR (คะแนน ผลปรับเทียบ ผลสรุป) แบบประเมินตนเองของพนักงานยังอยู่
-app.delete('/api/evaluations/:id', requireAuth, requireHR, async (req, res, next) => {
+// พี่เลี้ยงลบร่างผลประเมิน (คะแนนและความเห็น) แบบประเมินตนเองของพนักงานยังอยู่ — ลบได้เฉพาะร่างที่ยังไม่ส่ง
+app.delete('/api/evaluations/:id', requireAuth, requireMentor, async (req, res, next) => {
   try {
     const id = String(req.params.id).toLowerCase();
     const wasPublic = await tx(async ex => {
       const { cycleId } = await openCycle(ex);
       const ev = await evalOf(ex, cycleId, id);
-      if (!ev || ['not_started', 'pending_mentor'].includes(ev.STATUS)) throw fail(404, 'ไม่พบผลประเมินที่จะลบ');
+      requireOwnStaff(ev, req);
+      if (ev.STATUS !== 'draft') throw fail(409, 'ลบได้เฉพาะร่างที่ยังไม่ได้ส่งให้ HR');
       await ex("DELETE FROM evaluation_scores WHERE evaluation_id = :id AND evaluator_role IN ('mentor', 'hr')", { id: ev.EVALUATION_ID });
       await ex('DELETE FROM evaluation_results WHERE evaluation_id = :id', { id: ev.EVALUATION_ID });
       await ex(`UPDATE evaluations SET status = CASE WHEN self_submitted_at IS NOT NULL THEN 'pending_mentor' ELSE 'not_started' END,
-                       mentor_id = NULL, strengths = NULL, improvements = NULL,
+                       strengths = NULL, improvements = NULL,
                        category_comments = NULL, employee_reply = NULL, replied_at = NULL, mentor_submitted_at = NULL,
                        updated_at = SYSTIMESTAMP WHERE evaluation_id = :id`, { id: ev.EVALUATION_ID });
       await audit(ex, req.uid, 'evaluations', ev.EVALUATION_ID, 'RESET', { employee: id, before: ev.STATUS, after: 'not_started' });
       return PUBLIC.includes(ev.STATUS);
     });
-    if (wasPublic) await notify(id, 'ผลประเมินของคุณถูกยกเลิก', 'HR จะประเมินใหม่อีกครั้ง', 'mine');
+    if (wasPublic) await notify(id, 'ผลประเมินของคุณถูกยกเลิก', 'พี่เลี้ยงจะประเมินใหม่อีกครั้ง', 'mine');
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -832,6 +896,51 @@ app.post('/api/reviews/:id/confirm', requireAuth, requireHR, async (req, res, ne
     res.json({ ok: true, final });
   } catch (e) { next(e); }
 });
+app.post('/api/reviews/:id/return', requireAuth, requireHR, async (req, res, next) => {
+  try {
+    const id = String(req.params.id).toLowerCase();
+    const reason = String((req.body || {}).reason || '').trim();
+    if (!reason || reason.length > 2000) return res.status(400).json({ error: 'กรุณาระบุเหตุผลที่ส่งกลับ (ไม่เกิน 2000 ตัวอักษร)' });
+    const ev = await tx(async ex => {
+      const { cycleId } = await openCycle(ex);
+      const ev = await evalOf(ex, cycleId, id);
+      if (!ev || ev.STATUS !== 'pending_hr') throw fail(409, 'ส่งกลับได้เฉพาะผลที่อยู่ในสถานะรอ HR ตรวจสอบ');
+      await ex("UPDATE evaluations SET status = 'draft', mentor_submitted_at = NULL, updated_at = SYSTIMESTAMP WHERE evaluation_id = :id", { id: ev.EVALUATION_ID });
+      await ex("DELETE FROM evaluation_scores WHERE evaluation_id = :id AND evaluator_role = 'hr'", { id: ev.EVALUATION_ID });
+      await ex('DELETE FROM evaluation_results WHERE evaluation_id = :id', { id: ev.EVALUATION_ID });
+      await audit(ex, req.uid, 'evaluations', ev.EVALUATION_ID, 'RETURN_TO_MENTOR', { employee: id, before: 'pending_hr', after: 'draft', reason: reason.slice(0, 500) });
+      return ev;
+    });
+    const m = await mentorOf(id);
+    if (m) await notify(m, 'HR ส่งผลประเมินของ ' + ev.FULL_NAME + ' กลับให้แก้ไข', reason.slice(0, 200), 'list');
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+// HR มอบหมาย/เปลี่ยนพี่เลี้ยงของพนักงานในรอบที่เปิดอยู่
+app.put('/api/assignments/:id', requireAuth, requireHR, async (req, res, next) => {
+  try {
+    const id = String(req.params.id).toLowerCase();
+    const mentor = String((req.body || {}).mentor || '').toLowerCase();
+    const out = await tx(async ex => {
+      const { cycleId } = await openCycle(ex);
+      const ev = await evalOf(ex, cycleId, id);
+      if (!ev) throw fail(404, 'ไม่พบรายการประเมินของพนักงานในรอบนี้');
+      if (LOCKED.includes(ev.STATUS)) throw fail(409, 'ผลประเมินนี้ยืนยันแล้ว เปลี่ยนพี่เลี้ยงไม่ได้');
+      let mid = null, mname = '';
+      if (mentor) {
+        const m = await ex("SELECT user_id, full_name FROM users WHERE username = :u AND role = 'mentor' AND status = 'active'", { u: mentor });
+        if (!m.rows.length) throw fail(400, 'ไม่พบพี่เลี้ยง');
+        mid = m.rows[0].USER_ID; mname = m.rows[0].FULL_NAME;
+      }
+      if (mid === ev.MENTOR_ID) return null;
+      await ex('UPDATE evaluations SET mentor_id = :m, updated_at = SYSTIMESTAMP WHERE evaluation_id = :id', { m: mid, id: ev.EVALUATION_ID });
+      await audit(ex, req.uid, 'evaluations', ev.EVALUATION_ID, 'ASSIGN_MENTOR', { employee: id, mentor: mentor || null });
+      return { name: ev.FULL_NAME, mname };
+    });
+    if (out && mentor) await notify(mentor, 'คุณได้รับมอบหมายให้เป็นพี่เลี้ยงของ ' + out.name, 'ตรวจสอบเป้าหมายและประเมินผลได้ที่เมนู "ประเมินพนักงาน"', 'list');
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
 app.post('/api/reviews/:id/unconfirm', requireAuth, requireHR, async (req, res, next) => {
   try {
     const id = String(req.params.id).toLowerCase();
@@ -863,7 +972,11 @@ app.post('/api/reviews/publish', requireAuth, requireHR, async (req, res, next) 
       }
       return list.map(x => x.USERNAME);
     });
-    for (const u of done) await notify(u, 'ผลประเมินของคุณเผยแพร่แล้ว', 'ตรวจสอบคะแนนและกดรับทราบได้ที่หน้า "ผลประเมินของฉัน"', 'mine');
+    for (const u of done) {
+      await notify(u, 'ผลประเมินของคุณเผยแพร่แล้ว', 'ตรวจสอบคะแนนและกดรับทราบได้ที่หน้า "ผลประเมินของฉัน"', 'mine');
+      const m = await mentorOf(u).catch(() => null);
+      if (m) await notify(m, 'HR เผยแพร่ผลประเมินของ ' + u + ' แล้ว', '', 'list');
+    }
     res.json({ ok: true, count: done.length });
   } catch (e) { next(e); }
 });
@@ -871,8 +984,11 @@ app.post('/api/reviews/publish', requireAuth, requireHR, async (req, res, next) 
 /* ---------- ประเมินตนเอง (UC-03, UC-04) และส่งกลับให้แก้ไข (UC-10) ---------- */
 app.get('/api/self-evaluations', requireAuth, async (req, res, next) => {
   try {
-    if (req.user.role === 'evaluator') res.json((await loadSelf(null, cycleParam(req))).filter(x => x.status !== 'none' || x.returnReason));
-    else res.json(await loadSelf(req.user.id, cycleParam(req)));
+    const role = req.user.role;
+    if (role === 'evaluatee') return res.json(await loadSelf(req.user.id, cycleParam(req)));
+    const list = await loadSelf(null, cycleParam(req), role === 'mentor' ? req.uid : null);
+    // พี่เลี้ยง/HR/ผู้บริหาร ไม่เห็นร่างที่พนักงานยังไม่ส่ง
+    res.json(list.filter(x => x.status !== 'none' || x.returnReason).map(x => x.status === 'draft' ? { ...x, scores: new Array(20).fill(0), cc: [], comment: '' } : x));
   } catch (e) { next(e); }
 });
 app.put('/api/self-evaluations/me', requireAuth, requireEmployee, async (req, res, next) => {
@@ -892,14 +1008,14 @@ app.put('/api/self-evaluations/me', requireAuth, requireEmployee, async (req, re
       if (submit && settings.req.selfCatComment && cc.filter(x => x.trim()).length < 5) throw fail(400, 'กรุณากรอกความเห็นให้ครบทุกหมวดก่อนส่ง');
       let ev = await evalOf(ex, cycleId, req.user.id), evalId, before = 'not_started';
       if (ev) {
-        if (ev.SELF_SUBMITTED_AT) throw fail(409, 'ส่งแบบประเมินตนเองแล้ว แก้ไขไม่ได้ (ถ้าต้องแก้ ให้ HR ส่งกลับ)');
+        if (ev.SELF_SUBMITTED_AT) throw fail(409, 'ส่งแบบประเมินตนเองแล้ว แก้ไขไม่ได้ (ถ้าต้องแก้ ให้พี่เลี้ยงส่งกลับ)');
         evalId = ev.EVALUATION_ID; before = ev.STATUS;
       } else {
         const ins = await ex(`INSERT INTO evaluations (cycle_id, employee_id, form_id, status) VALUES (:c, :e, :f, 'not_started')
                               RETURNING evaluation_id INTO :rid`, { c: cycleId, e: req.uid, f: formId, rid: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
         evalId = ins.outBinds.rid[0];
       }
-      const after = submit && ['not_started', 'returned'].includes(before) ? 'pending_mentor' : before;   // ยังไม่มีผลจาก HR -> รอประเมิน
+      const after = submit && ['not_started', 'returned'].includes(before) ? 'pending_mentor' : before;   // ยังไม่มีผลจากพี่เลี้ยง -> รอประเมิน
       await ex(`UPDATE evaluations SET self_comment = :cm, self_category_comments = :cc, status = :s, updated_at = SYSTIMESTAMP,
                        self_submitted_at = CASE WHEN :sub = 1 THEN SYSTIMESTAMP ELSE NULL END
                  WHERE evaluation_id = :id`,
@@ -907,11 +1023,11 @@ app.put('/api/self-evaluations/me', requireAuth, requireEmployee, async (req, re
       await saveScores(ex, evalId, 'employee', criteria, scores);
       await audit(ex, req.uid, 'evaluations', evalId, submit ? 'SELF_SUBMIT' : 'SELF_SAVE_DRAFT', { before, after, answered: scores.filter(x => x > 0).length, average: avg });
     });
-    if (submit) await notifyHR(req.user.name + ' ส่งแบบประเมินตนเองแล้ว', 'คะแนนเฉลี่ยที่ประเมินตนเอง ' + (avg == null ? '-' : avg.toFixed(2)) + ' กดเพื่อดูรายละเอียด', 'selfs');
+    if (submit) await notifyMentor(req.user.id, req.user.name + ' ส่งแบบประเมินตนเองแล้ว', 'คะแนนเฉลี่ยที่ประเมินตนเอง ' + (avg == null ? '-' : avg.toFixed(2)) + ' กดเพื่อดูรายละเอียด', 'selfs');
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
-app.post('/api/self-evaluations/:id/return', requireAuth, requireHR, async (req, res, next) => {
+app.post('/api/self-evaluations/:id/return', requireAuth, requireMentor, async (req, res, next) => {
   try {
     const id = String(req.params.id).toLowerCase();
     const reason = String((req.body || {}).reason || '').trim();
@@ -919,15 +1035,16 @@ app.post('/api/self-evaluations/:id/return', requireAuth, requireHR, async (req,
     await tx(async ex => {
       const { cycleId } = await openCycle(ex);
       const ev = await evalOf(ex, cycleId, id);
-      if (!ev || !ev.SELF_SUBMITTED_AT) throw fail(404, 'พนักงานยังไม่ได้ส่งแบบประเมินตนเอง');
-      // UC-10 Exception 2: ส่งกลับได้เฉพาะก่อน HR เริ่มประเมิน
-      if (ev.STATUS !== 'pending_mentor') throw fail(409, 'HR เริ่มประเมินพนักงานคนนี้แล้ว ส่งกลับไม่ได้ (ถ้าจำเป็น ให้ลบผลประเมินก่อน)');
+      requireOwnStaff(ev, req);
+      if (!ev.SELF_SUBMITTED_AT) throw fail(404, 'พนักงานยังไม่ได้ส่งแบบประเมินตนเอง');
+      // UC-10 Exception 2: ส่งกลับได้เฉพาะก่อนพี่เลี้ยงเริ่มประเมิน
+      if (ev.STATUS !== 'pending_mentor') throw fail(409, 'คุณเริ่มประเมินพนักงานคนนี้แล้ว ส่งกลับไม่ได้ (ถ้าจำเป็น ให้ลบร่างผลประเมินก่อน)');
       await ex(`UPDATE evaluations SET self_submitted_at = NULL, updated_at = SYSTIMESTAMP, status = 'returned'
                  WHERE evaluation_id = :id`, { id: ev.EVALUATION_ID });
       await ex('INSERT INTO return_records (evaluation_id, reason) VALUES (:id, :r)', { id: ev.EVALUATION_ID, r: { val: reason, type: oracledb.CLOB } });
       await audit(ex, req.uid, 'evaluations', ev.EVALUATION_ID, 'RETURN_SELF', { employee: id, reason: reason.slice(0, 200) });
     });
-    await notify(id, 'HR ส่งแบบประเมินตนเองกลับให้แก้ไข', reason.slice(0, 200), 'self');
+    await notify(id, 'พี่เลี้ยงส่งแบบประเมินตนเองกลับให้แก้ไข', reason.slice(0, 200), 'self');
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1022,16 +1139,20 @@ app.post('/api/change-pin', requireAuth, async (req, res, next) => {
 /* ---------- ประวัติพนักงาน (users + departments) ---------- */
 app.get('/api/employees', requireAuth, async (req, res, next) => {
   try {
-    const all = req.user.role === 'evaluator';
+    const role = req.user.role, all = role === 'evaluator' || role === 'executive', men = role === 'mentor';
+    let cycleId = -1;
+    try { cycleId = (await currentCycle(query, cycleParam(req))).cycleId; } catch (_) {}
     const r = await query(
       `SELECT u.username, u.full_name, u.role, u.position_name, u.emp_code, d.department_name, u.phone, u.email,
-              TO_CHAR(u.start_date, 'YYYY-MM-DD') AS start_txt
+              TO_CHAR(u.start_date, 'YYYY-MM-DD') AS start_txt, m.username AS mentor_u
          FROM users u LEFT JOIN departments d ON d.department_id = u.department_id
-        WHERE u.status = 'active' AND u.role IN ('hr', 'employee')` + (all ? '' : ' AND u.user_id = :id') +
-      ' ORDER BY u.emp_code, u.username', all ? {} : { id: req.uid });
+         LEFT JOIN evaluations e ON e.employee_id = u.user_id AND e.cycle_id = :c
+         LEFT JOIN users m ON m.user_id = e.mentor_id
+        WHERE u.status = 'active'` + (all ? '' : men ? ' AND (u.user_id = :id OR e.mentor_id = :id)' : ' AND u.user_id = :id') +
+      ' ORDER BY u.emp_code, u.username', all ? { c: cycleId } : { c: cycleId, id: req.uid });
     res.json(r.rows.map(row => ({
       id: row.USERNAME, name: row.FULL_NAME, role: ROLE_OUT[row.ROLE] || row.ROLE, position: row.POSITION_NAME,
-      code: row.EMP_CODE, department: row.DEPARTMENT_NAME, phone: row.PHONE, email: row.EMAIL, startDate: row.START_TXT
+      code: row.EMP_CODE, department: row.DEPARTMENT_NAME, phone: row.PHONE, email: row.EMAIL, startDate: row.START_TXT, mentor: row.MENTOR_U || ''
     })));
   } catch (e) { next(e); }
 });
@@ -1039,9 +1160,10 @@ app.get('/api/employees', requireAuth, async (req, res, next) => {
 /* ---------- ตารางเวลางาน (work_schedules) ---------- */
 app.get('/api/schedules', requireAuth, async (req, res, next) => {
   try {
-    const own = req.user.role !== 'evaluator';
+    const role = req.user.role, all = role === 'evaluator', men = role === 'mentor';
     const r = await query('SELECT u.username, s.day_no, s.shift_code FROM work_schedules s JOIN users u ON u.user_id = s.user_id' +
-      (own ? ' WHERE s.user_id = :id' : '') + ' ORDER BY u.username, s.day_no', own ? { id: req.uid } : {});
+      (all ? '' : men ? " WHERE s.user_id = :id OR s.user_id IN (SELECT e.employee_id FROM evaluations e JOIN evaluation_cycles c ON c.cycle_id = e.cycle_id WHERE c.status = 'open' AND e.mentor_id = :id)" : ' WHERE s.user_id = :id') +
+      ' ORDER BY u.username, s.day_no', all ? {} : { id: req.uid });
     res.json(r.rows.map(row => ({ userId: row.USERNAME, day: row.DAY_NO, shift: row.SHIFT_CODE })));
   } catch (e) { next(e); }
 });
@@ -1092,6 +1214,36 @@ app.post('/api/notifications/read', requireAuth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+const DEMO_ROLES = [
+  { u: 'mentor01', n: 'สมศักดิ์ ดูแลดี', r: 'mentor', d: 'ฝ่ายขาย', p: 'หัวหน้าฝ่ายขาย (พี่เลี้ยง)', c: 'EMP101', ph: '081-000-0101', since: '2014-03-01',
+    deps: ['ฝ่ายขาย', 'บัญชี', 'การตลาด', 'บริการลูกค้า', 'บริหาร'] },
+  { u: 'mentor02', n: 'มาลี ใส่ใจ', r: 'mentor', d: 'ซ่อมบำรุง', p: 'หัวหน้าฝ่ายปฏิบัติการ (พี่เลี้ยง)', c: 'EMP102', ph: '081-000-0102', since: '2013-08-15',
+    deps: ['ซ่อมบำรุง', 'คลังสินค้า', 'ไอที', 'ขนส่ง', 'ฝ่ายบุคคล'] },
+  { u: 'exec01', n: 'คุณประเสริฐ วงศ์ใหญ่', r: 'executive', d: 'บริหาร', p: 'ผู้อำนวยการ', c: 'EMP900', ph: '081-000-0900', since: '2010-01-04', deps: [] }
+];
+async function ensureRoleAccounts() {
+  const has = await query("SELECT COUNT(*) AS n FROM users WHERE role IN ('mentor', 'executive')");
+  if (Number(has.rows[0].N) > 0) return;
+  for (const x of DEMO_ROLES) {
+    const ex0 = await query('SELECT 1 AS x FROM users WHERE username = :u', { u: x.u });
+    if (ex0.rows.length) continue;
+    await query(`INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
+                 SELECT :u, :h, :n, :r, (SELECT MIN(department_id) FROM departments WHERE department_name = :d), :p, :c, :ph, :em, TO_DATE(:s, 'YYYY-MM-DD') FROM DUAL`,
+      { u: x.u, h: pinHash(x.u, '1234'), n: x.n, r: x.r, d: x.d, p: x.p, c: x.c, ph: x.ph, em: x.u + '@example.com', s: x.since });
+  }
+  // มอบหมายพี่เลี้ยงให้รายการประเมินของรอบที่เปิดอยู่ที่ยังไม่มีพี่เลี้ยง (หรือเดิม HR ประเมินแทน)
+  for (const x of DEMO_ROLES.filter(y => y.deps.length)) {
+    for (const d of x.deps) {
+      await query(`UPDATE evaluations SET mentor_id = (SELECT user_id FROM users WHERE username = :m)
+                    WHERE cycle_id IN (SELECT cycle_id FROM evaluation_cycles WHERE status = 'open')
+                      AND (mentor_id IS NULL OR mentor_id IN (SELECT user_id FROM users WHERE role <> 'mentor'))
+                      AND employee_id IN (SELECT u.user_id FROM users u JOIN departments dd ON dd.department_id = u.department_id WHERE dd.department_name = :d)`,
+        { m: x.u, d });
+    }
+  }
+  console.log('เพิ่มบัญชีพี่เลี้ยง (mentor01, mentor02) และผู้บริหาร (exec01) แล้ว PIN 1234');
+}
+
 app.use((err, _req, res, _next) => {
   if (err && err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
   console.error(err);
@@ -1127,6 +1279,8 @@ app.use((err, _req, res, _next) => {
                      WHEN stage_name LIKE '%ประเมิน%' THEN 'evaluate' END
                    WHERE stage_key IS NULL`);
     } catch (e) { console.error('stage_key backfill:', e.message); }
+    // ฐานข้อมูลรุ่นก่อน (มีแค่ HR + พนักงาน): เพิ่มบัญชีพี่เลี้ยง/ผู้บริหารตัวอย่าง และมอบหมายพี่เลี้ยงตามแผนก
+    try { await ensureRoleAccounts(); } catch (e) { console.error('ensure roles:', e.message); }
     // เตือนถ้ายังใช้ฐานข้อมูลรุ่นเก่า (ยังไม่มีบัญชี HR)
     try {
       const h = await query("SELECT COUNT(*) AS n FROM users WHERE role = 'hr'");
