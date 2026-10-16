@@ -37,10 +37,10 @@ App.N = App.CATS.length * App.PER;    // จำนวนข้อทั้งห
 /* บัญชีทดลอง: PIN ทุกบัญชี 1234 (ใช้ seed ตอนฐานข้อมูลยังว่าง) */
 App.DEMO_PIN = "1234";
 App.DEMO_ACCOUNTS = {
-  hr01:    { name: "คุณวิชัย ใจกว้าง (HR)", role: "evaluator", position: "ผู้จัดการฝ่ายบุคคล" },
-  mentor01: { name: "สมศักดิ์ ดูแลดี",   role: "mentor", position: "หัวหน้าฝ่ายขาย (พี่เลี้ยง)" },
-  exec01:  { name: "คุณประเสริฐ วงศ์ใหญ่", role: "executive", position: "ผู้อำนวยการ" },
-  somchai: { name: "สมชาย ใจดี",        role: "evaluatee", position: "เจ้าหน้าที่ฝ่ายขาย" },
+  hr01:    { name: "คุณวิชัย ใจกว้าง (HR)", role: "evaluator", position: "ผู้จัดการฝ่ายทรัพยากรบุคคล" },
+  mentor01: { name: "สมศักดิ์ ดูแลดี",   role: "mentor", position: "ผู้จัดการฝ่ายขายและการตลาด (พี่เลี้ยง)" },
+  exec01:  { name: "คุณประเสริฐ วงศ์ใหญ่", role: "executive", position: "ผู้จัดการทั่วไป (General Manager)" },
+  somchai: { name: "สมชาย ใจดี",        role: "evaluatee", position: "เจ้าหน้าที่ฝ่ายขาย (Sales Executive)" },
   nida:    { name: "นิดา รักงาน",        role: "evaluatee", position: "เจ้าหน้าที่บัญชี" },
-  anan:    { name: "อนันต์ มั่นคง",      role: "evaluatee", position: "ช่างเทคนิค" }
+  anan:    { name: "อนันต์ มั่นคง",      role: "evaluatee", position: "ช่างซ่อมบำรุง" }
 };

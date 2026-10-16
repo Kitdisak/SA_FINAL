@@ -1215,11 +1215,11 @@ app.post('/api/notifications/read', requireAuth, async (req, res, next) => {
 });
 
 const DEMO_ROLES = [
-  { u: 'mentor01', n: 'สมศักดิ์ ดูแลดี', r: 'mentor', d: 'ฝ่ายขาย', p: 'หัวหน้าฝ่ายขาย (พี่เลี้ยง)', c: 'EMP101', ph: '081-000-0101', since: '2014-03-01',
-    deps: ['ฝ่ายขาย', 'บัญชี', 'การตลาด', 'บริการลูกค้า', 'บริหาร'] },
-  { u: 'mentor02', n: 'มาลี ใส่ใจ', r: 'mentor', d: 'ซ่อมบำรุง', p: 'หัวหน้าฝ่ายปฏิบัติการ (พี่เลี้ยง)', c: 'EMP102', ph: '081-000-0102', since: '2013-08-15',
-    deps: ['ซ่อมบำรุง', 'คลังสินค้า', 'ไอที', 'ขนส่ง', 'ฝ่ายบุคคล'] },
-  { u: 'exec01', n: 'คุณประเสริฐ วงศ์ใหญ่', r: 'executive', d: 'บริหาร', p: 'ผู้อำนวยการ', c: 'EMP900', ph: '081-000-0900', since: '2010-01-04', deps: [] }
+  { u: 'mentor01', n: 'สมศักดิ์ ดูแลดี', r: 'mentor', d: 'ขายและการตลาด', p: 'ผู้จัดการฝ่ายขายและการตลาด (พี่เลี้ยง)', c: 'EMP101', ph: '081-000-0101', since: '2014-03-01',
+    deps: ['ขายและการตลาด', 'บัญชีและการเงิน', 'อาหารและเครื่องดื่ม', 'ส่วนหน้า', 'ฝ่ายบริหาร', 'ฝ่ายขาย', 'บัญชี', 'การตลาด', 'บริการลูกค้า', 'บริหาร'] },
+  { u: 'mentor02', n: 'มาลี ใส่ใจ', r: 'mentor', d: 'วิศวกรรม', p: 'หัวหน้าฝ่ายวิศวกรรม (พี่เลี้ยง)', c: 'EMP102', ph: '081-000-0102', since: '2013-08-15',
+    deps: ['วิศวกรรม', 'แม่บ้าน', 'ครัว', 'รักษาความปลอดภัย', 'ทรัพยากรบุคคล', 'ซ่อมบำรุง', 'คลังสินค้า', 'ไอที', 'ขนส่ง', 'ฝ่ายบุคคล'] },
+  { u: 'exec01', n: 'คุณประเสริฐ วงศ์ใหญ่', r: 'executive', d: 'ฝ่ายบริหาร', p: 'ผู้จัดการทั่วไป (General Manager)', c: 'EMP900', ph: '081-000-0900', since: '2010-01-04', deps: [] }
 ];
 async function ensureRoleAccounts() {
   const has = await query("SELECT COUNT(*) AS n FROM users WHERE role IN ('mentor', 'executive')");
@@ -1228,8 +1228,8 @@ async function ensureRoleAccounts() {
     const ex0 = await query('SELECT 1 AS x FROM users WHERE username = :u', { u: x.u });
     if (ex0.rows.length) continue;
     await query(`INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-                 SELECT :u, :h, :n, :r, (SELECT MIN(department_id) FROM departments WHERE department_name = :d), :p, :c, :ph, :em, TO_DATE(:s, 'YYYY-MM-DD') FROM DUAL`,
-      { u: x.u, h: pinHash(x.u, '1234'), n: x.n, r: x.r, d: x.d, p: x.p, c: x.c, ph: x.ph, em: x.u + '@example.com', s: x.since });
+                 SELECT :u, :h, :n, :r, (SELECT MIN(department_id) FROM departments WHERE department_name IN (:d, :d2)), :p, :c, :ph, :em, TO_DATE(:s, 'YYYY-MM-DD') FROM DUAL`,
+      { u: x.u, h: pinHash(x.u, '1234'), n: x.n, r: x.r, d: x.d, d2: { 'ขายและการตลาด': 'ฝ่ายขาย', 'วิศวกรรม': 'ซ่อมบำรุง', 'ฝ่ายบริหาร': 'บริหาร' }[x.d], p: x.p, c: x.c, ph: x.ph, em: x.u + '@example.com', s: x.since });
   }
   // มอบหมายพี่เลี้ยงให้รายการประเมินของรอบที่เปิดอยู่ที่ยังไม่มีพี่เลี้ยง (หรือเดิม HR ประเมินแทน)
   for (const x of DEMO_ROLES.filter(y => y.deps.length)) {

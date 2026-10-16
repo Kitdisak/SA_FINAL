@@ -201,50 +201,50 @@ CREATE TABLE deadline_extensions (
 
 -- ============================== ข้อมูลตัวอย่าง ==============================
 
-INSERT INTO departments (department_name) VALUES ('บริหาร');
-INSERT INTO departments (department_name) VALUES ('ฝ่ายขาย');
-INSERT INTO departments (department_name) VALUES ('บัญชี');
-INSERT INTO departments (department_name) VALUES ('ซ่อมบำรุง');
-INSERT INTO departments (department_name) VALUES ('ฝ่ายบุคคล');
-INSERT INTO departments (department_name) VALUES ('คลังสินค้า');
-INSERT INTO departments (department_name) VALUES ('การตลาด');
-INSERT INTO departments (department_name) VALUES ('ไอที');
-INSERT INTO departments (department_name) VALUES ('บริการลูกค้า');
-INSERT INTO departments (department_name) VALUES ('ขนส่ง');
+INSERT INTO departments (department_name) VALUES ('ฝ่ายบริหาร');
+INSERT INTO departments (department_name) VALUES ('ขายและการตลาด');
+INSERT INTO departments (department_name) VALUES ('บัญชีและการเงิน');
+INSERT INTO departments (department_name) VALUES ('วิศวกรรม');
+INSERT INTO departments (department_name) VALUES ('ทรัพยากรบุคคล');
+INSERT INTO departments (department_name) VALUES ('แม่บ้าน');
+INSERT INTO departments (department_name) VALUES ('อาหารและเครื่องดื่ม');
+INSERT INTO departments (department_name) VALUES ('ครัว');
+INSERT INTO departments (department_name) VALUES ('ส่วนหน้า');
+INSERT INTO departments (department_name) VALUES ('รักษาความปลอดภัย');
 
 -- บัญชีผู้ใช้ (PIN เริ่มต้น 1234 = SHA-256 ของ username:PIN)
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'hr01', '9da9cdf113701739897639e288dee0d3b9a164922c04f6a0e112701bf4e6922a', 'คุณวิชัย ใจกว้าง (HR)', 'hr', department_id, 'ผู้จัดการฝ่ายบุคคล', 'EMP000', '081-000-0000', 'wichai@example.com', DATE '2012-06-01' FROM departments WHERE department_name = 'ฝ่ายบุคคล';
+SELECT 'hr01', '9da9cdf113701739897639e288dee0d3b9a164922c04f6a0e112701bf4e6922a', 'คุณวิชัย ใจกว้าง (HR)', 'hr', department_id, 'ผู้จัดการฝ่ายทรัพยากรบุคคล', 'EMP000', '081-000-0000', 'wichai@example.com', DATE '2012-06-01' FROM departments WHERE department_name = 'ทรัพยากรบุคคล';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'somchai', '9ab7a7dde4785b02281434205a65a303ae36b0d2a1795807995a4fa02644ec52', 'สมชาย ใจดี', 'employee', department_id, 'เจ้าหน้าที่ฝ่ายขาย', 'EMP001', '081-000-0001', 'somchai@example.com', DATE '2016-04-01' FROM departments WHERE department_name = 'ฝ่ายขาย';
+SELECT 'somchai', '9ab7a7dde4785b02281434205a65a303ae36b0d2a1795807995a4fa02644ec52', 'สมชาย ใจดี', 'employee', department_id, 'เจ้าหน้าที่ฝ่ายขาย (Sales Executive)', 'EMP001', '081-000-0001', 'somchai@example.com', DATE '2016-04-01' FROM departments WHERE department_name = 'ขายและการตลาด';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'nida', 'ce228c70de3a84c65b0338049d946d7c5f2f40a0fbc42bd23e0fcda172f81f19', 'นิดา รักงาน', 'employee', department_id, 'เจ้าหน้าที่บัญชี', 'EMP002', '081-000-0002', 'nida@example.com', DATE '2020-08-17' FROM departments WHERE department_name = 'บัญชี';
+SELECT 'nida', 'ce228c70de3a84c65b0338049d946d7c5f2f40a0fbc42bd23e0fcda172f81f19', 'นิดา รักงาน', 'employee', department_id, 'เจ้าหน้าที่บัญชี', 'EMP002', '081-000-0002', 'nida@example.com', DATE '2020-08-17' FROM departments WHERE department_name = 'บัญชีและการเงิน';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'anan', '0a23502a48a5199e7a58b78ed13b3f189b98182de57d2a2509506617ab20d571', 'อนันต์ มั่นคง', 'employee', department_id, 'ช่างเทคนิค', 'EMP003', '081-000-0003', 'anan@example.com', DATE '2015-01-12' FROM departments WHERE department_name = 'ซ่อมบำรุง';
+SELECT 'anan', '0a23502a48a5199e7a58b78ed13b3f189b98182de57d2a2509506617ab20d571', 'อนันต์ มั่นคง', 'employee', department_id, 'ช่างซ่อมบำรุง', 'EMP003', '081-000-0003', 'anan@example.com', DATE '2015-01-12' FROM departments WHERE department_name = 'วิศวกรรม';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'kanya', '20f460eb5cfa28c9a7a42e7978e12ad32cba579d60b725c0fea370b3d0399b99', 'กัญญา ศรีสุข', 'employee', department_id, 'เจ้าหน้าที่ฝ่ายบุคคล', 'EMP005', '081-000-0005', 'kanya@example.com', DATE '2021-03-01' FROM departments WHERE department_name = 'ฝ่ายบุคคล';
+SELECT 'kanya', '20f460eb5cfa28c9a7a42e7978e12ad32cba579d60b725c0fea370b3d0399b99', 'กัญญา ศรีสุข', 'employee', department_id, 'เจ้าหน้าที่ทรัพยากรบุคคล', 'EMP005', '081-000-0005', 'kanya@example.com', DATE '2021-03-01' FROM departments WHERE department_name = 'ทรัพยากรบุคคล';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'prasit', '944ffb3e417c1bcc211b309172359e01d70e60b01876361f34367a394f488ee3', 'ประสิทธิ์ แก้วมณี', 'employee', department_id, 'พนักงานคลังสินค้า', 'EMP006', '081-000-0006', 'prasit@example.com', DATE '2019-07-15' FROM departments WHERE department_name = 'คลังสินค้า';
+SELECT 'prasit', '944ffb3e417c1bcc211b309172359e01d70e60b01876361f34367a394f488ee3', 'ประสิทธิ์ แก้วมณี', 'employee', department_id, 'พนักงานทำความสะอาดห้องพัก', 'EMP006', '081-000-0006', 'prasit@example.com', DATE '2019-07-15' FROM departments WHERE department_name = 'แม่บ้าน';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'wanpen', '8c49448e64884b14e39cef0476d79aecb70a8daf347fbe4e6c92244ce3b74eb2', 'วันเพ็ญ ทองดี', 'employee', department_id, 'เจ้าหน้าที่การตลาด', 'EMP007', '081-000-0007', 'wanpen@example.com', DATE '2022-01-10' FROM departments WHERE department_name = 'การตลาด';
+SELECT 'wanpen', '8c49448e64884b14e39cef0476d79aecb70a8daf347fbe4e6c92244ce3b74eb2', 'วันเพ็ญ ทองดี', 'employee', department_id, 'พนักงานเสิร์ฟอาหารและเครื่องดื่ม', 'EMP007', '081-000-0007', 'wanpen@example.com', DATE '2022-01-10' FROM departments WHERE department_name = 'อาหารและเครื่องดื่ม';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'thanawat', 'b0aa743e355199f44fb04bae9505974cc12dc47461eef28eba9f5f6a2523d073', 'ธนวัฒน์ ใจกล้า', 'employee', department_id, 'โปรแกรมเมอร์', 'EMP008', '081-000-0008', 'thanawat@example.com', DATE '2023-05-02' FROM departments WHERE department_name = 'ไอที';
+SELECT 'thanawat', 'b0aa743e355199f44fb04bae9505974cc12dc47461eef28eba9f5f6a2523d073', 'ธนวัฒน์ ใจกล้า', 'employee', department_id, 'ผู้ช่วยเชฟ', 'EMP008', '081-000-0008', 'thanawat@example.com', DATE '2023-05-02' FROM departments WHERE department_name = 'ครัว';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'suda', 'ea27872cf2bc9f829046f7439ac1ecc24f6082010abb57042790487f2d9c1aab', 'สุดา พรหมมา', 'employee', department_id, 'เจ้าหน้าที่ฝ่ายขาย', 'EMP009', '081-000-0009', 'suda@example.com', DATE '2020-11-16' FROM departments WHERE department_name = 'ฝ่ายขาย';
+SELECT 'suda', 'ea27872cf2bc9f829046f7439ac1ecc24f6082010abb57042790487f2d9c1aab', 'สุดา พรหมมา', 'employee', department_id, 'เจ้าหน้าที่การตลาดออนไลน์', 'EMP009', '081-000-0009', 'suda@example.com', DATE '2020-11-16' FROM departments WHERE department_name = 'ขายและการตลาด';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'chaiwat', '497132cdd30898d7337c376199479ff0945a0366f74708354814351bd16cc92a', 'ชัยวัฒน์ บุญมา', 'employee', department_id, 'ช่างเทคนิค', 'EMP010', '081-000-0010', 'chaiwat@example.com', DATE '2018-02-05' FROM departments WHERE department_name = 'ซ่อมบำรุง';
+SELECT 'chaiwat', '497132cdd30898d7337c376199479ff0945a0366f74708354814351bd16cc92a', 'ชัยวัฒน์ บุญมา', 'employee', department_id, 'ช่างไฟฟ้า', 'EMP010', '081-000-0010', 'chaiwat@example.com', DATE '2018-02-05' FROM departments WHERE department_name = 'วิศวกรรม';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'pimchanok', '507f149ac02547352c9bd3fe83888b4e9d427f1f813e39b677a78e3b42dd18e1', 'พิมพ์ชนก แสงทอง', 'employee', department_id, 'เจ้าหน้าที่บริการลูกค้า', 'EMP011', '081-000-0011', 'pimchanok@example.com', DATE '2024-02-19' FROM departments WHERE department_name = 'บริการลูกค้า';
+SELECT 'pimchanok', '507f149ac02547352c9bd3fe83888b4e9d427f1f813e39b677a78e3b42dd18e1', 'พิมพ์ชนก แสงทอง', 'employee', department_id, 'พนักงานต้อนรับส่วนหน้า', 'EMP011', '081-000-0011', 'pimchanok@example.com', DATE '2024-02-19' FROM departments WHERE department_name = 'ส่วนหน้า';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'kittisak', '41c5100d976c1cf7f0cecffe6ab35e3a6fd3103c3a2d82b264b29ef480d8f71e', 'กิตติศักดิ์ อินทร์ดี', 'employee', department_id, 'พนักงานขับรถ', 'EMP012', '081-000-0012', 'kittisak@example.com', DATE '2017-09-01' FROM departments WHERE department_name = 'ขนส่ง';
+SELECT 'kittisak', '41c5100d976c1cf7f0cecffe6ab35e3a6fd3103c3a2d82b264b29ef480d8f71e', 'กิตติศักดิ์ อินทร์ดี', 'employee', department_id, 'พนักงานรักษาความปลอดภัย', 'EMP012', '081-000-0012', 'kittisak@example.com', DATE '2017-09-01' FROM departments WHERE department_name = 'รักษาความปลอดภัย';
 
 -- พี่เลี้ยง 2 คน (ดูแลพนักงานตามแผนก) และผู้บริหาร 1 คน
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'mentor01', 'cd0681f5923e1b1945d3f33d3817a02f57dccc2c34917eaa77224b15619f9afa', 'สมศักดิ์ ดูแลดี', 'mentor', department_id, 'หัวหน้าฝ่ายขาย (พี่เลี้ยง)', 'EMP101', '081-000-0101', 'mentor01@example.com', DATE '2014-03-01' FROM departments WHERE department_name = 'ฝ่ายขาย';
+SELECT 'mentor01', 'cd0681f5923e1b1945d3f33d3817a02f57dccc2c34917eaa77224b15619f9afa', 'สมศักดิ์ ดูแลดี', 'mentor', department_id, 'ผู้จัดการฝ่ายขายและการตลาด (พี่เลี้ยง)', 'EMP101', '081-000-0101', 'mentor01@example.com', DATE '2014-03-01' FROM departments WHERE department_name = 'ขายและการตลาด';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'mentor02', '35a9588aa1c85571336f62ebd660e39560a72ecd84adba90303c6dbad160e457', 'มาลี ใส่ใจ', 'mentor', department_id, 'หัวหน้าฝ่ายปฏิบัติการ (พี่เลี้ยง)', 'EMP102', '081-000-0102', 'mentor02@example.com', DATE '2013-08-15' FROM departments WHERE department_name = 'ซ่อมบำรุง';
+SELECT 'mentor02', '35a9588aa1c85571336f62ebd660e39560a72ecd84adba90303c6dbad160e457', 'มาลี ใส่ใจ', 'mentor', department_id, 'หัวหน้าฝ่ายวิศวกรรม (พี่เลี้ยง)', 'EMP102', '081-000-0102', 'mentor02@example.com', DATE '2013-08-15' FROM departments WHERE department_name = 'วิศวกรรม';
 INSERT INTO users (username, password_hash, full_name, role, department_id, position_name, emp_code, phone, email, start_date)
-SELECT 'exec01', 'b28b9ac50b310895d37b9e4ba242be35f8b164e1d55f826988d440da3e47d964', 'คุณประเสริฐ วงศ์ใหญ่', 'executive', department_id, 'ผู้อำนวยการ', 'EMP900', '081-000-0900', 'exec01@example.com', DATE '2010-01-04' FROM departments WHERE department_name = 'บริหาร';
+SELECT 'exec01', 'b28b9ac50b310895d37b9e4ba242be35f8b164e1d55f826988d440da3e47d964', 'คุณประเสริฐ วงศ์ใหญ่', 'executive', department_id, 'ผู้จัดการทั่วไป (General Manager)', 'EMP900', '081-000-0900', 'exec01@example.com', DATE '2010-01-04' FROM departments WHERE department_name = 'ฝ่ายบริหาร';
 
 -- รอบการประเมินและช่วงเวลาแต่ละขั้นตอน
 -- ช่วงเวลาตั้งให้ "กำลังดำเนินการ" ณ วันที่รันไฟล์นี้ เพื่อให้ทดลองได้ทันที (HR แก้วันที่ได้ที่เมนูรอบการประเมิน)
@@ -282,10 +282,10 @@ INSERT INTO criteria (form_id, title, category, sort_order, min_score, max_score
 UPDATE evaluation_forms SET settings = '{"max":5,"labels":["ต้องปรับปรุงมาก","ต้องปรับปรุง","ตามเกณฑ์","ดี","ดีเยี่ยม"],"req":{"strengths":true,"improvements":true,"catComment":false,"selfComment":true,"selfCatComment":false}}';
 
 -- ระบบสร้างรายการประเมินสถานะ "ยังไม่เริ่ม" ให้พนักงานทุกคนเมื่อเปิดรอบ (ภาคผนวก ข)
--- พร้อมมอบหมายพี่เลี้ยง (evaluations.mentor_id): mentor01 ดูแลฝ่ายขาย บัญชี การตลาด บริการลูกค้า / mentor02 ดูแลฝ่ายที่เหลือ
+-- พร้อมมอบหมายพี่เลี้ยง (evaluations.mentor_id): mentor01 ดูแลขายและการตลาด บัญชีและการเงิน อาหารและเครื่องดื่ม ส่วนหน้า / mentor02 ดูแลวิศวกรรม แม่บ้าน ครัว รักษาความปลอดภัย ทรัพยากรบุคคล
 INSERT INTO evaluations (cycle_id, employee_id, form_id, status, mentor_id)
 SELECT f.cycle_id, u.user_id, f.form_id, 'not_started',
-       (SELECT m.user_id FROM users m WHERE m.username = CASE WHEN d.department_name IN ('ฝ่ายขาย', 'บัญชี', 'การตลาด', 'บริการลูกค้า', 'บริหาร') THEN 'mentor01' ELSE 'mentor02' END)
+       (SELECT m.user_id FROM users m WHERE m.username = CASE WHEN d.department_name IN ('ขายและการตลาด', 'บัญชีและการเงิน', 'อาหารและเครื่องดื่ม', 'ส่วนหน้า', 'ฝ่ายบริหาร') THEN 'mentor01' ELSE 'mentor02' END)
 FROM users u JOIN departments d ON d.department_id = u.department_id CROSS JOIN evaluation_forms f
 WHERE u.role = 'employee' AND f.form_name = 'แบบประเมินผลการปฏิบัติงานประจำปี';
 
